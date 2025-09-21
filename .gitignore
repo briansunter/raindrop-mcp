@@ -1,0 +1,100 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Build output
+dist/
+out/
+build/
+*.tgz
+
+# Environment variables - NEVER commit these
+.env
+.env.*
+!.env.example
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Testing
+coverage/
+*.lcov
+.nyc_output
+test-results/
+
+# TypeScript
+*.tsbuildinfo
+*.js
+*.d.ts
+*.js.map
+*.d.ts.map
+# Keep source TypeScript files
+!src/**/*.ts
+
+# IDE and Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+.cache/
+
+# Security - Test files with tokens
+test.js
+test-*.js
+*-test.js
+*.test.js
+# Any file that might contain secrets
+secrets.*
+credentials.*
+token.*
+apikey.*
+*.key
+*.pem
+*.cert
+
+# Backup files
+*.backup
+*.bak
+*.orig
+
+# Package manager
+.npm
+.yarn-integrity
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Cursor IDE
+.cursor/
