@@ -43,9 +43,11 @@ class RaindropClient {
   }
 
   // Collections API
-  async getCollections(root: boolean = true): Promise<any> {
+  async getCollections(root: boolean = true, params?: any): Promise<any> {
     const endpoint = root ? "/collections" : "/collections/childrens";
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const queryParams = new URLSearchParams(params || {});
+    const url = `${API_BASE_URL}${endpoint}${queryParams.toString() ? `?${queryParams}` : ""}`;
+    const response = await fetch(url, {
       headers: this.headers,
     });
     return this.handleResponse(response);
@@ -138,10 +140,11 @@ class RaindropClient {
   }
 
   // Tags API
-  async getTags(collectionId?: number): Promise<any> {
+  async getTags(collectionId?: number, params?: any): Promise<any> {
+    const queryParams = new URLSearchParams(params || {});
     const url = collectionId !== undefined
-      ? `${API_BASE_URL}/tags/${collectionId}`
-      : `${API_BASE_URL}/tags`;
+      ? `${API_BASE_URL}/tags/${collectionId}${queryParams.toString() ? `?${queryParams}` : ""}`
+      : `${API_BASE_URL}/tags${queryParams.toString() ? `?${queryParams}` : ""}`;
     const response = await fetch(url, {
       headers: this.headers,
     });
@@ -222,11 +225,17 @@ server.registerTool(
     description: "Get all root or nested collections",
     inputSchema: {
       root: z.boolean().default(true).describe("Get root collections (true) or nested collections (false)"),
+      page: z.number().min(0).optional().describe("Page number starting from 0 (only used if API supports pagination)"),
+      perpage: z.number().min(1).max(50).optional().describe("Items per page, max 50 (only used if API supports pagination)"),
     },
   },
-  async ({ root }) => {
+  async ({ root, page, perpage }) => {
     try {
-      const result = await client.getCollections(root);
+      const params: any = {};
+      if (page !== undefined) params.page = page;
+      if (perpage !== undefined) params.perpage = perpage;
+
+      const result = await client.getCollections(root, Object.keys(params).length > 0 ? params : undefined);
       return {
         content: [
           {
@@ -424,8 +433,8 @@ server.registerTool(
     description: "Get raindrops from a collection",
     inputSchema: {
       collectionId: z.number().describe("Collection ID (0 for all, -1 for Unsorted, -99 for Trash)"),
-      page: z.number().default(0).describe("Page number"),
-      perpage: z.number().default(25).describe("Items per page (max 50)"),
+      page: z.number().min(0).default(0).describe("Page number (starts from 0)"),
+      perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50)"),
       sort: z.enum(["-created", "created", "score", "-sort", "title", "-title", "domain", "-domain"]).optional().describe("Sort order"),
       search: z.string().optional().describe("Search query"),
       nested: z.boolean().optional().describe("Include bookmarks from nested collections"),
@@ -638,8 +647,8 @@ server.registerTool(
     inputSchema: {
       search: z.string().describe("Search query (supports operators like #tag, site:example.com, etc.)"),
       collectionId: z.number().default(0).describe("Collection to search in (0 for all)"),
-      page: z.number().default(0).describe("Page number"),
-      perpage: z.number().default(25).describe("Items per page (max 50)"),
+      page: z.number().min(0).default(0).describe("Page number (starts from 0)"),
+      perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50)"),
       sort: z.enum(["-created", "created", "score", "-sort", "title", "-title", "domain", "-domain"]).optional().describe("Sort order"),
     },
   },
@@ -677,11 +686,17 @@ server.registerTool(
     description: "Get all tags or tags from a specific collection",
     inputSchema: {
       collectionId: z.number().optional().describe("Collection ID (omit for all tags)"),
+      page: z.number().min(0).optional().describe("Page number starting from 0 (only used if API supports pagination)"),
+      perpage: z.number().min(1).max(50).optional().describe("Items per page, max 50 (only used if API supports pagination)"),
     },
   },
-  async ({ collectionId }) => {
+  async ({ collectionId, page, perpage }) => {
     try {
-      const result = await client.getTags(collectionId);
+      const params: any = {};
+      if (page !== undefined) params.page = page;
+      if (perpage !== undefined) params.perpage = perpage;
+
+      const result = await client.getTags(collectionId, Object.keys(params).length > 0 ? params : undefined);
       return {
         content: [
           {
@@ -783,8 +798,8 @@ server.registerTool(
     description: "Get all highlights or highlights from a specific collection",
     inputSchema: {
       collectionId: z.number().optional().describe("Collection ID (omit for all highlights)"),
-      page: z.number().default(0).describe("Page number"),
-      perpage: z.number().default(25).describe("Items per page (max 50)"),
+      page: z.number().min(0).default(0).describe("Page number (starts from 0)"),
+      perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50)"),
     },
   },
   async (params) => {

@@ -127,6 +127,7 @@ The server runs on stdio transport and can be integrated with any MCP client.
 ### Collections
 
 - **list-collections**: Get all root or nested collections
+  - Supports optional pagination parameters (page, perpage) if API supports it
 - **get-collection**: Get details of a specific collection
 - **create-collection**: Create a new collection
 - **update-collection**: Update an existing collection
@@ -135,21 +136,25 @@ The server runs on stdio transport and can be integrated with any MCP client.
 ### Raindrops (Bookmarks)
 
 - **list-raindrops**: Get bookmarks from a collection
+  - Pagination: page (starting from 0), perpage (max 50, default 25)
 - **get-raindrop**: Get a specific bookmark
 - **create-raindrop**: Create a new bookmark
 - **update-raindrop**: Update an existing bookmark
 - **delete-raindrop**: Delete a bookmark
 - **search-raindrops**: Search bookmarks using Raindrop.io's search syntax
+  - Pagination: page (starting from 0), perpage (max 50, default 25)
 
 ### Tags
 
 - **list-tags**: Get all tags or tags from a specific collection
+  - Supports optional pagination parameters (page, perpage) if API supports it
 - **rename-tag**: Rename a tag across all bookmarks
 - **delete-tags**: Delete one or more tags
 
 ### Highlights
 
 - **list-highlights**: Get highlights from all bookmarks or specific collection
+  - Pagination: page (starting from 0), perpage (max 50, default 25)
 
 ### Utilities
 
@@ -197,6 +202,24 @@ The server runs on stdio transport and can be integrated with any MCP client.
   }
 }
 ```
+
+## Pagination
+
+The following tools support pagination for handling large result sets:
+
+- **list-raindrops**, **search-raindrops**: Full pagination support
+  - `page`: Page number starting from 0
+  - `perpage`: Items per page (1-50, default 25)
+- **list-highlights**: Full pagination support
+  - `page`: Page number starting from 0
+  - `perpage`: Items per page (1-50, default 25)
+- **list-collections**, **list-tags**: Optional pagination
+  - These endpoints may not support pagination in the API but parameters are accepted for future compatibility
+
+When using pagination, responses typically include:
+- `count`: Total number of items
+- `items`: Array of results for current page
+- `collectionId`: Collection context (when applicable)
 
 ## Search Operators
 
