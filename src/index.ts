@@ -43,10 +43,9 @@ class RaindropClient {
   }
 
   // Collections API
-  async getCollections(root: boolean = true, params?: any): Promise<any> {
+  async getCollections(root: boolean = true): Promise<any> {
     const endpoint = root ? "/collections" : "/collections/childrens";
-    const queryParams = new URLSearchParams(params || {});
-    const url = `${API_BASE_URL}${endpoint}${queryParams.toString() ? `?${queryParams}` : ""}`;
+    const url = `${API_BASE_URL}${endpoint}`;
     const response = await fetch(url, {
       headers: this.headers,
     });
@@ -140,11 +139,10 @@ class RaindropClient {
   }
 
   // Tags API
-  async getTags(collectionId?: number, params?: any): Promise<any> {
-    const queryParams = new URLSearchParams(params || {});
+  async getTags(collectionId?: number): Promise<any> {
     const url = collectionId !== undefined
-      ? `${API_BASE_URL}/tags/${collectionId}${queryParams.toString() ? `?${queryParams}` : ""}`
-      : `${API_BASE_URL}/tags${queryParams.toString() ? `?${queryParams}` : ""}`;
+      ? `${API_BASE_URL}/tags/${collectionId}`
+      : `${API_BASE_URL}/tags`;
     const response = await fetch(url, {
       headers: this.headers,
     });
@@ -222,20 +220,14 @@ server.registerTool(
   "list-collections",
   {
     title: "List Collections",
-    description: "Get all root or nested collections",
+    description: "Get all root or nested collections (Note: Collections API returns all collections without pagination)",
     inputSchema: {
       root: z.boolean().default(true).describe("Get root collections (true) or nested collections (false)"),
-      page: z.number().min(0).optional().describe("Page number starting from 0 (only used if API supports pagination)"),
-      perpage: z.number().min(1).max(50).optional().describe("Items per page, max 50 (only used if API supports pagination)"),
     },
   },
-  async ({ root, page, perpage }) => {
+  async ({ root }) => {
     try {
-      const params: any = {};
-      if (page !== undefined) params.page = page;
-      if (perpage !== undefined) params.perpage = perpage;
-
-      const result = await client.getCollections(root, Object.keys(params).length > 0 ? params : undefined);
+      const result = await client.getCollections(root);
       return {
         content: [
           {
@@ -430,7 +422,7 @@ server.registerTool(
   "list-raindrops",
   {
     title: "List Raindrops",
-    description: "Get raindrops from a collection",
+    description: "Get raindrops from a collection with pagination support",
     inputSchema: {
       collectionId: z.number().describe("Collection ID (0 for all, -1 for Unsorted, -99 for Trash)"),
       page: z.number().min(0).default(0).describe("Page number (starts from 0)"),
@@ -643,7 +635,7 @@ server.registerTool(
   "search-raindrops",
   {
     title: "Search Raindrops",
-    description: "Search for raindrops using Raindrop.io's search syntax",
+    description: "Search for raindrops using Raindrop.io's search syntax with pagination support",
     inputSchema: {
       search: z.string().describe("Search query (supports operators like #tag, site:example.com, etc.)"),
       collectionId: z.number().default(0).describe("Collection to search in (0 for all)"),
@@ -683,20 +675,14 @@ server.registerTool(
   "list-tags",
   {
     title: "List Tags",
-    description: "Get all tags or tags from a specific collection",
+    description: "Get all tags or tags from a specific collection (Note: Tags API returns all tags without pagination)",
     inputSchema: {
       collectionId: z.number().optional().describe("Collection ID (omit for all tags)"),
-      page: z.number().min(0).optional().describe("Page number starting from 0 (only used if API supports pagination)"),
-      perpage: z.number().min(1).max(50).optional().describe("Items per page, max 50 (only used if API supports pagination)"),
     },
   },
-  async ({ collectionId, page, perpage }) => {
+  async ({ collectionId }) => {
     try {
-      const params: any = {};
-      if (page !== undefined) params.page = page;
-      if (perpage !== undefined) params.perpage = perpage;
-
-      const result = await client.getTags(collectionId, Object.keys(params).length > 0 ? params : undefined);
+      const result = await client.getTags(collectionId);
       return {
         content: [
           {
@@ -795,11 +781,11 @@ server.registerTool(
   "list-highlights",
   {
     title: "List Highlights",
-    description: "Get all highlights or highlights from a specific collection",
+    description: "Get all highlights or highlights from a specific collection with pagination support",
     inputSchema: {
       collectionId: z.number().optional().describe("Collection ID (omit for all highlights)"),
       page: z.number().min(0).default(0).describe("Page number (starts from 0)"),
-      perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50)"),
+      perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50, default 25)"),
     },
   },
   async (params) => {
