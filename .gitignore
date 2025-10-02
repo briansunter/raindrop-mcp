@@ -101,3 +101,9 @@ apikey.*
 
 # Cursor IDE
 .cursor/
+
+# Claude IDE
+.claude/
+
+# Local configuration files
+claude-desktop-config.json

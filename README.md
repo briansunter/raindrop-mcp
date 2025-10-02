@@ -68,7 +68,7 @@ Add one of the following configurations to your Claude Desktop settings:
   "mcpServers": {
     "raindrop": {
       "command": "node",
-      "args": ["/path/to/mcp-raindrop/dist/index.js"],
+      "args": ["/path/to/raindrop-mcp/dist/index.js"],
       "env": {
         "RAINDROP_TOKEN": "your-raindrop-api-token-here"
       }
@@ -83,7 +83,7 @@ Add one of the following configurations to your Claude Desktop settings:
   "mcpServers": {
     "raindrop": {
       "command": "bun",
-      "args": ["run", "/path/to/mcp-raindrop/src/index.ts"],
+      "args": ["run", "/path/to/raindrop-mcp/src/index.ts"],
       "env": {
         "RAINDROP_TOKEN": "your-raindrop-api-token-here"
       }
@@ -93,7 +93,7 @@ Add one of the following configurations to your Claude Desktop settings:
 ```
 
 **Note**: Make sure to:
-1. Replace `/path/to/mcp-raindrop` with the actual path
+1. Replace `/path/to/raindrop-mcp` with the actual path
 2. Build the project first if using Node.js: `npm run build`
 3. Verify your token is valid (see Troubleshooting below)
 
@@ -302,10 +302,6 @@ curl -H "Authorization: Bearer YOUR_TOKEN_HERE" \
 ```
 
 A valid token will return your user data. An invalid token will return a 401 error.
-
-## Security
-
-**⚠️ IMPORTANT**: Never commit your API token to version control. See [SECURITY.md](SECURITY.md) for detailed security guidelines.
 
 ## API Documentation
 

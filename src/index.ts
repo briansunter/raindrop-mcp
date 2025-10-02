@@ -370,7 +370,7 @@ class RaindropClient {
 
 // Initialize the MCP server
 const server = new McpServer({
-  name: "mcp-raindrop",
+  name: "raindrop-mcp",
   version: "1.0.0",
 });
 
