@@ -19,6 +19,81 @@ interface RaindropApiError {
   errorMessage?: string;
 }
 
+// Field presets for common use cases
+const FIELD_PRESETS = {
+  minimal: ['_id', 'link', 'title', 'created'],
+  basic: ['_id', 'link', 'title', 'excerpt', 'tags', 'created', 'domain'],
+  standard: ['_id', 'link', 'title', 'excerpt', 'note', 'tags', 'type', 'cover', 'created', 'lastUpdate', 'domain', 'important'],
+  media: ['_id', 'link', 'title', 'cover', 'media', 'type', 'file'],
+  organization: ['_id', 'title', 'tags', 'collection', 'collectionId', 'sort', 'removed'],
+  metadata: ['_id', 'created', 'lastUpdate', 'creatorRef', 'user', 'broken', 'cache'],
+} as const;
+
+type FieldPreset = keyof typeof FIELD_PRESETS;
+
+// Helper function to filter object fields
+function filterFields(obj: any, fields?: string[] | FieldPreset): any {
+  if (!fields) return obj;
+
+  // If it's a preset name, get the fields from preset
+  const fieldList = typeof fields === 'string' && fields in FIELD_PRESETS
+    ? FIELD_PRESETS[fields as FieldPreset]
+    : fields as string[];
+
+  if (!Array.isArray(fieldList) || fieldList.length === 0) return obj;
+
+  // Handle single object
+  if (!Array.isArray(obj)) {
+    const filtered: any = {};
+    for (const field of fieldList) {
+      if (field in obj) {
+        filtered[field] = obj[field];
+      }
+    }
+    return filtered;
+  }
+
+  // Handle array of objects
+  return obj.map((item: any) => {
+    const filtered: any = {};
+    for (const field of fieldList) {
+      if (field in item) {
+        filtered[field] = item[field];
+      }
+    }
+    return filtered;
+  });
+}
+
+// Helper function to apply field filtering to API responses
+function filterApiResponse(data: any, fields?: string[] | FieldPreset): any {
+  if (!fields) return data;
+
+  // For responses with items array (e.g., raindrops)
+  if (data.items && Array.isArray(data.items)) {
+    return {
+      ...data,
+      items: filterFields(data.items, fields)
+    };
+  }
+
+  // For responses with item object (e.g., single raindrop)
+  if (data.item && typeof data.item === 'object') {
+    return {
+      ...data,
+      item: filterFields(data.item, fields)
+    };
+  }
+
+  // For direct array responses (e.g., collections)
+  if (Array.isArray(data)) {
+    return filterFields(data, fields);
+  }
+
+  // For other response types, return as-is
+  return data;
+}
+
 class RaindropClient {
   private headers: Record<string, string>;
 
@@ -223,16 +298,30 @@ server.registerTool(
     description: "Get all root or nested collections (Note: Collections API returns all collections without pagination)",
     inputSchema: {
       root: z.boolean().default(true).describe("Get root collections (true) or nested collections (false)"),
+      fields: z.preprocess(
+        (val) => {
+          if (typeof val === 'string') {
+            try {
+              return JSON.parse(val);
+            } catch {
+              return val;
+            }
+          }
+          return val;
+        },
+        z.array(z.string())
+      ).optional().describe("Array of field names to include in the response (e.g., ['_id', 'title', 'count', 'public', 'parent'])")
     },
   },
-  async ({ root }) => {
+  async ({ root, fields }) => {
     try {
       const result = await client.getCollections(root);
+      const filtered = filterApiResponse(result, fields as string[]);
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: JSON.stringify(filtered, null, 2),
           },
         ],
       };
@@ -254,19 +343,33 @@ server.registerTool(
   "get-collection",
   {
     title: "Get Collection",
-    description: "Get details of a specific collection",
+    description: "Get details of a specific collection with field selection support",
     inputSchema: {
       id: z.number().describe("Collection ID"),
+      fields: z.preprocess(
+        (val) => {
+          if (typeof val === 'string') {
+            try {
+              return JSON.parse(val);
+            } catch {
+              return val;
+            }
+          }
+          return val;
+        },
+        z.array(z.string())
+      ).optional().describe("Array of field names to include in the response (e.g., ['_id', 'title', 'count', 'public', 'parent'])")
     },
   },
-  async ({ id }) => {
+  async ({ id, fields }) => {
     try {
       const result = await client.getCollection(id);
+      const filtered = filterApiResponse(result, fields as string[]);
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: JSON.stringify(filtered, null, 2),
           },
         ],
       };
@@ -422,7 +525,7 @@ server.registerTool(
   "list-raindrops",
   {
     title: "List Raindrops",
-    description: "Get raindrops from a collection with pagination support",
+    description: "Get raindrops from a collection with pagination and field selection support",
     inputSchema: {
       collectionId: z.number().describe("Collection ID (0 for all, -1 for Unsorted, -99 for Trash)"),
       page: z.number().min(0).default(0).describe("Page number (starts from 0)"),
@@ -430,17 +533,34 @@ server.registerTool(
       sort: z.enum(["-created", "created", "score", "-sort", "title", "-title", "domain", "-domain"]).optional().describe("Sort order"),
       search: z.string().optional().describe("Search query"),
       nested: z.boolean().optional().describe("Include bookmarks from nested collections"),
+      fields: z.preprocess(
+        (val) => {
+          if (typeof val === 'string') {
+            try {
+              return JSON.parse(val);
+            } catch {
+              return val;
+            }
+          }
+          return val;
+        },
+        z.union([
+          z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
+          z.array(z.string())
+        ])
+      ).optional().describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
     },
   },
   async (params) => {
     try {
-      const { collectionId, ...queryParams } = params;
+      const { collectionId, fields, ...queryParams } = params;
       const result = await client.getRaindrops(collectionId, queryParams);
+      const filtered = filterApiResponse(result, fields as string[] | FieldPreset);
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: JSON.stringify(filtered, null, 2),
           },
         ],
       };
@@ -462,19 +582,36 @@ server.registerTool(
   "get-raindrop",
   {
     title: "Get Raindrop",
-    description: "Get a specific raindrop/bookmark by ID",
+    description: "Get a specific raindrop/bookmark by ID with field selection support",
     inputSchema: {
       id: z.number().describe("Raindrop ID"),
+      fields: z.preprocess(
+        (val) => {
+          if (typeof val === 'string') {
+            try {
+              return JSON.parse(val);
+            } catch {
+              return val;
+            }
+          }
+          return val;
+        },
+        z.union([
+          z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
+          z.array(z.string())
+        ])
+      ).optional().describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
     },
   },
-  async ({ id }) => {
+  async ({ id, fields }) => {
     try {
       const result = await client.getRaindrop(id);
+      const filtered = filterApiResponse(result, fields as string[] | FieldPreset);
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: JSON.stringify(filtered, null, 2),
           },
         ],
       };
@@ -635,24 +772,41 @@ server.registerTool(
   "search-raindrops",
   {
     title: "Search Raindrops",
-    description: "Search for raindrops using Raindrop.io's search syntax with pagination support",
+    description: "Search for raindrops using Raindrop.io's search syntax with pagination and field selection support",
     inputSchema: {
       search: z.string().describe("Search query (supports operators like #tag, site:example.com, etc.)"),
       collectionId: z.number().default(0).describe("Collection to search in (0 for all)"),
       page: z.number().min(0).default(0).describe("Page number (starts from 0)"),
       perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50)"),
       sort: z.enum(["-created", "created", "score", "-sort", "title", "-title", "domain", "-domain"]).optional().describe("Sort order"),
+      fields: z.preprocess(
+        (val) => {
+          if (typeof val === 'string') {
+            try {
+              return JSON.parse(val);
+            } catch {
+              return val;
+            }
+          }
+          return val;
+        },
+        z.union([
+          z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
+          z.array(z.string())
+        ])
+      ).optional().describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
     },
   },
   async (params) => {
     try {
-      const { collectionId, search, ...otherParams } = params;
+      const { collectionId, search, fields, ...otherParams } = params;
       const result = await client.searchRaindrops(collectionId, search, otherParams);
+      const filtered = filterApiResponse(result, fields as string[] | FieldPreset);
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: JSON.stringify(filtered, null, 2),
           },
         ],
       };
@@ -678,16 +832,30 @@ server.registerTool(
     description: "Get all tags or tags from a specific collection (Note: Tags API returns all tags without pagination)",
     inputSchema: {
       collectionId: z.number().optional().describe("Collection ID (omit for all tags)"),
+      fields: z.preprocess(
+        (val) => {
+          if (typeof val === 'string') {
+            try {
+              return JSON.parse(val);
+            } catch {
+              return val;
+            }
+          }
+          return val;
+        },
+        z.array(z.string())
+      ).optional().describe("Array of field names to include in the response (e.g., ['_id', 'count'])")
     },
   },
-  async ({ collectionId }) => {
+  async ({ collectionId, fields }) => {
     try {
       const result = await client.getTags(collectionId);
+      const filtered = filterApiResponse(result, fields as string[]);
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: JSON.stringify(filtered, null, 2),
           },
         ],
       };
@@ -781,22 +949,36 @@ server.registerTool(
   "list-highlights",
   {
     title: "List Highlights",
-    description: "Get all highlights or highlights from a specific collection with pagination support",
+    description: "Get all highlights or highlights from a specific collection with pagination and field selection support",
     inputSchema: {
       collectionId: z.number().optional().describe("Collection ID (omit for all highlights)"),
       page: z.number().min(0).default(0).describe("Page number (starts from 0)"),
       perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50, default 25)"),
+      fields: z.preprocess(
+        (val) => {
+          if (typeof val === 'string') {
+            try {
+              return JSON.parse(val);
+            } catch {
+              return val;
+            }
+          }
+          return val;
+        },
+        z.array(z.string())
+      ).optional().describe("Array of field names to include in the response (e.g., ['_id', 'text', 'color', 'note', 'created'])")
     },
   },
   async (params) => {
     try {
-      const { collectionId, ...queryParams } = params;
+      const { collectionId, fields, ...queryParams } = params;
       const result = await client.getHighlights(collectionId, queryParams);
+      const filtered = filterApiResponse(result, fields as string[]);
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: JSON.stringify(filtered, null, 2),
           },
         ],
       };
