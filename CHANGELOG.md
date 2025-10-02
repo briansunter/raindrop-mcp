@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/briansunter/raindrop-mcp/compare/v1.0.0...v1.0.1) (2025-10-02)
+
+
+### Bug Fixes
+
+* update package name to @briansunter/raindrop-mcp to resolve npm conflict ([cae5bf5](https://github.com/briansunter/raindrop-mcp/commit/cae5bf5ab71affac3cefe50d7abdfaac60d8ba14))
+
 # 1.0.0 (2025-10-02)
 
 
