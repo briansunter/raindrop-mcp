@@ -3,9 +3,22 @@
   "version": "1.0.0",
   "description": "MCP server for Raindrop.io API integration",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "type": "module",
   "license": "MIT",
   "author": "MCP Raindrop Contributors",
+  "bin": {
+    "mcp-raindrop": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/yourusername/mcp-raindrop.git"
@@ -22,7 +35,11 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "start:dev": "node -r dotenv/config dist/index.js",
-    "start:bun": "bun run src/index.ts"
+    "start:bun": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "prepare": "husky"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
@@ -33,6 +50,22 @@
     "@types/node": "^20.0.0",
     "dotenv": "^16.3.1",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "semantic-release": "^24.0.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^10.0.0",
+    "@semantic-release/npm": "^12.0.0",
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0",
+    "husky": "^9.0.0",
+    "@eslint/js": "^9.34.0",
+    "@typescript-eslint/eslint-plugin": "^8.42.0",
+    "@typescript-eslint/parser": "^8.42.0",
+    "eslint": "^9.34.0",
+    "globals": "^16.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

@@ -40,6 +40,9 @@ test-results/
 *.d.ts.map
 # Keep source TypeScript files
 !src/**/*.ts
+# Keep config files
+!eslint.config.js
+!commitlint.config.cjs
 
 # IDE and Editor
 .idea/

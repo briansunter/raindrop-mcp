@@ -147,8 +147,10 @@ The server runs on stdio transport and can be integrated with any MCP client.
 ### Tags
 
 - **list-tags**: Get all tags or tags from a specific collection
-  - Supports optional pagination parameters (page, perpage) if API supports it
-- **rename-tag**: Rename a tag across all bookmarks
+- **merge-tags**: Merge multiple tags into one, or rename a single tag
+  - Can merge multiple tags (e.g., ["javascript", "js"] → "JavaScript")
+  - Can rename a single tag (e.g., ["python"] → "Python")
+  - Optional: limit to specific collection
 - **delete-tags**: Delete one or more tags
 
 ### Highlights
@@ -202,6 +204,37 @@ The server runs on stdio transport and can be integrated with any MCP client.
   }
 }
 ```
+
+### Merging tags
+
+**IMPORTANT**: Both `tags` and `newTag` are required parameters.
+
+Merge multiple tags into one:
+```json
+{
+  "tool": "merge-tags",
+  "arguments": {
+    "tags": ["javascript", "js", "JS"],
+    "newTag": "JavaScript"
+  }
+}
+```
+
+Rename a single tag:
+```json
+{
+  "tool": "merge-tags",
+  "arguments": {
+    "tags": ["python"],
+    "newTag": "Python"
+  }
+}
+```
+
+**Common Errors**:
+- ❌ Missing parameters: Both `tags` (array) and `newTag` (string) must be provided
+- ❌ Empty tags array: Must include at least one tag to merge
+- ❌ Empty newTag string: The new tag name cannot be empty
 
 ## Pagination
 

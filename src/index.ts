@@ -31,6 +31,29 @@ const FIELD_PRESETS = {
 
 type FieldPreset = keyof typeof FIELD_PRESETS;
 
+// Helper function to safely parse JSON in preprocessing
+function safeJsonParse(val: any): any {
+  // If already an array, return as-is
+  if (Array.isArray(val)) {
+    return val;
+  }
+  // If undefined or null, return as-is
+  if (val === undefined || val === null) {
+    return val;
+  }
+  // If string, try to parse as JSON
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val);
+    } catch (e) {
+      // Return undefined on parse error so Zod's optional() handles it
+      return undefined;
+    }
+  }
+  // For other types, return as-is
+  return val;
+}
+
 // Helper function to filter object fields
 function filterFields(obj: any, fields?: string[] | FieldPreset): any {
   if (!fields) return obj;
@@ -40,7 +63,10 @@ function filterFields(obj: any, fields?: string[] | FieldPreset): any {
     ? FIELD_PRESETS[fields as FieldPreset]
     : fields as string[];
 
-  if (!Array.isArray(fieldList) || fieldList.length === 0) return obj;
+  if (!Array.isArray(fieldList)) return obj;
+
+  // Empty array means filter out all fields - return empty object
+  if (fieldList.length === 0) return {};
 
   // Handle single object
   if (!Array.isArray(obj)) {
@@ -68,6 +94,17 @@ function filterFields(obj: any, fields?: string[] | FieldPreset): any {
 // Helper function to apply field filtering to API responses
 function filterApiResponse(data: any, fields?: string[] | FieldPreset): any {
   if (!fields) return data;
+
+  // Resolve preset to array if needed
+  const fieldList = typeof fields === 'string' && fields in FIELD_PRESETS
+    ? FIELD_PRESETS[fields as FieldPreset]
+    : fields as string[];
+
+  // For empty array, return only top-level metadata (remove item/items)
+  if (Array.isArray(fieldList) && fieldList.length === 0) {
+    const { item, items, ...metadata } = data;
+    return metadata;
+  }
 
   // For responses with items array (e.g., raindrops)
   if (data.items && Array.isArray(data.items)) {
@@ -105,15 +142,20 @@ class RaindropClient {
   }
 
   private async handleResponse(response: Response): Promise<any> {
-    const data = await response.json() as any;
-    
+    let data: any;
+    try {
+      data = await response.json() as any;
+    } catch (e) {
+      throw new Error(`Failed to parse JSON response: ${response.status} ${response.statusText}`);
+    }
+
     if (!response.ok || data.result === false) {
       const error = data as RaindropApiError;
       throw new Error(
         error.errorMessage || error.error || `API request failed: ${response.status}`
       );
     }
-    
+
     return data;
   }
 
@@ -224,7 +266,7 @@ class RaindropClient {
     return this.handleResponse(response);
   }
 
-  async renameTag(oldTag: string, newTag: string, collectionId?: number): Promise<any> {
+  async mergeTags(tags: string[], newTag: string, collectionId?: number): Promise<any> {
     const url = collectionId !== undefined
       ? `${API_BASE_URL}/tags/${collectionId}`
       : `${API_BASE_URL}/tags`;
@@ -232,7 +274,7 @@ class RaindropClient {
       method: "PUT",
       headers: this.headers,
       body: JSON.stringify({
-        tags: [oldTag],
+        tags,
         replace: newTag,
       }),
     });
@@ -299,16 +341,7 @@ server.registerTool(
     inputSchema: {
       root: z.boolean().default(true).describe("Get root collections (true) or nested collections (false)"),
       fields: z.preprocess(
-        (val) => {
-          if (typeof val === 'string') {
-            try {
-              return JSON.parse(val);
-            } catch {
-              return val;
-            }
-          }
-          return val;
-        },
+        safeJsonParse,
         z.array(z.string())
       ).optional().describe("Array of field names to include in the response (e.g., ['_id', 'title', 'count', 'public', 'parent'])")
     },
@@ -347,16 +380,7 @@ server.registerTool(
     inputSchema: {
       id: z.number().describe("Collection ID"),
       fields: z.preprocess(
-        (val) => {
-          if (typeof val === 'string') {
-            try {
-              return JSON.parse(val);
-            } catch {
-              return val;
-            }
-          }
-          return val;
-        },
+        safeJsonParse,
         z.array(z.string())
       ).optional().describe("Array of field names to include in the response (e.g., ['_id', 'title', 'count', 'public', 'parent'])")
     },
@@ -534,16 +558,7 @@ server.registerTool(
       search: z.string().optional().describe("Search query"),
       nested: z.boolean().optional().describe("Include bookmarks from nested collections"),
       fields: z.preprocess(
-        (val) => {
-          if (typeof val === 'string') {
-            try {
-              return JSON.parse(val);
-            } catch {
-              return val;
-            }
-          }
-          return val;
-        },
+        safeJsonParse,
         z.union([
           z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
           z.array(z.string())
@@ -586,16 +601,7 @@ server.registerTool(
     inputSchema: {
       id: z.number().describe("Raindrop ID"),
       fields: z.preprocess(
-        (val) => {
-          if (typeof val === 'string') {
-            try {
-              return JSON.parse(val);
-            } catch {
-              return val;
-            }
-          }
-          return val;
-        },
+        safeJsonParse,
         z.union([
           z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
           z.array(z.string())
@@ -639,7 +645,10 @@ server.registerTool(
       title: z.string().optional().describe("Title (will be auto-parsed if not provided)"),
       excerpt: z.string().optional().describe("Description/excerpt"),
       note: z.string().optional().describe("Personal note"),
-      tags: z.array(z.string()).optional().describe("Tags for the bookmark"),
+      tags: z.preprocess(
+        safeJsonParse,
+        z.array(z.string())
+      ).optional().describe("Tags for the bookmark"),
       collectionId: z.number().optional().describe("Collection ID (default: -1 for Unsorted)"),
       important: z.boolean().optional().describe("Mark as favorite"),
       pleaseParse: z.boolean().default(true).describe("Auto-parse metadata from URL"),
@@ -694,22 +703,16 @@ server.registerTool(
       title: z.string().optional().describe("New title"),
       excerpt: z.string().optional().describe("New description"),
       note: z.string().optional().describe("New note"),
-      tags: z.array(z.string()).optional().describe("New tags (replaces existing)"),
+      tags: z.preprocess(
+        safeJsonParse,
+        z.array(z.string())
+      ).optional().describe("New tags (replaces existing)"),
       link: z.string().optional().describe("New URL"),
       collectionId: z.number().optional().describe("Move to different collection"),
       important: z.boolean().optional().describe("Mark/unmark as favorite"),
       order: z.number().optional().describe("Sort order position"),
       fields: z.preprocess(
-        (val) => {
-          if (typeof val === 'string') {
-            try {
-              return JSON.parse(val);
-            } catch {
-              return val;
-            }
-          }
-          return val;
-        },
+        safeJsonParse,
         z.union([
           z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
           z.array(z.string())
@@ -797,16 +800,7 @@ server.registerTool(
       perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50)"),
       sort: z.enum(["-created", "created", "score", "-sort", "title", "-title", "domain", "-domain"]).optional().describe("Sort order"),
       fields: z.preprocess(
-        (val) => {
-          if (typeof val === 'string') {
-            try {
-              return JSON.parse(val);
-            } catch {
-              return val;
-            }
-          }
-          return val;
-        },
+        safeJsonParse,
         z.union([
           z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
           z.array(z.string())
@@ -850,16 +844,7 @@ server.registerTool(
     inputSchema: {
       collectionId: z.number().optional().describe("Collection ID (omit for all tags)"),
       fields: z.preprocess(
-        (val) => {
-          if (typeof val === 'string') {
-            try {
-              return JSON.parse(val);
-            } catch {
-              return val;
-            }
-          }
-          return val;
-        },
+        safeJsonParse,
         z.array(z.string())
       ).optional().describe("Array of field names to include in the response (e.g., ['_id', 'count'])")
     },
@@ -891,24 +876,37 @@ server.registerTool(
 );
 
 server.registerTool(
-  "rename-tag",
+  "merge-tags",
   {
-    title: "Rename Tag",
-    description: "Rename a tag across all bookmarks or in a specific collection",
+    title: "Merge/Rename Tags",
+    description: "Merge multiple tags into a new tag name, or rename a single tag. All specified tags will be replaced with the new tag name across all bookmarks.",
     inputSchema: {
-      oldTag: z.string().describe("Current tag name"),
-      newTag: z.string().describe("New tag name"),
-      collectionId: z.number().optional().describe("Limit to specific collection"),
+      tags: z.preprocess(
+        safeJsonParse,
+        z.array(z.string()).min(1, "At least one tag must be specified")
+      ).describe("List of tag names to merge/rename (can be a single tag or multiple tags)"),
+      newTag: z.string().min(1, "New tag name is required and cannot be empty").describe("New tag name to replace all specified tags"),
+      collectionId: z.number().optional().describe("Limit operation to specific collection (omit to apply across all collections)"),
     },
   },
-  async ({ oldTag, newTag, collectionId }) => {
+  async ({ tags, newTag, collectionId }) => {
     try {
-      const result = await client.renameTag(oldTag, newTag, collectionId);
+      // Validate required parameters
+      if (!tags || tags.length === 0) {
+        throw new Error("Parameter 'tags' is required and must be a non-empty array of tag names");
+      }
+      if (!newTag || newTag.trim() === "") {
+        throw new Error("Parameter 'newTag' is required and cannot be empty");
+      }
+
+      const result = await client.mergeTags(tags, newTag, collectionId);
       return {
         content: [
           {
             type: "text",
-            text: "Tag renamed successfully",
+            text: tags.length === 1
+              ? "Tag renamed successfully"
+              : `${tags.length} tags merged into '${newTag}' successfully`,
           },
         ],
       };
@@ -972,16 +970,7 @@ server.registerTool(
       page: z.number().min(0).default(0).describe("Page number (starts from 0)"),
       perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50, default 25)"),
       fields: z.preprocess(
-        (val) => {
-          if (typeof val === 'string') {
-            try {
-              return JSON.parse(val);
-            } catch {
-              return val;
-            }
-          }
-          return val;
-        },
+        safeJsonParse,
         z.array(z.string())
       ).optional().describe("Array of field names to include in the response (e.g., ['_id', 'text', 'color', 'note', 'created'])")
     },
