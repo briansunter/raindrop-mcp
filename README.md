@@ -13,7 +13,7 @@ A Model Context Protocol server for [Raindrop.io](https://raindrop.io) - manage 
   "mcpServers": {
     "raindrop": {
       "command": "npx",
-      "args": ["raindrop-mcp"],
+      "args": ["@briansunter/raindrop-mcp"],
       "env": {
         "RAINDROP_TOKEN": "your-token-here"
       }
@@ -153,12 +153,17 @@ Add `minimal: true` to any create/update/delete operation to just get `"ok"` bac
 
 ### NPX (Recommended)
 ```bash
+npx @briansunter/raindrop-mcp
+```
+
+Or using the short command:
+```bash
 npx raindrop-mcp
 ```
 
 ### Global Install
 ```bash
-npm install -g raindrop-mcp
+npm install -g @briansunter/raindrop-mcp
 ```
 
 ### Local Development
@@ -183,7 +188,7 @@ Edit your Claude Desktop config file:
   "mcpServers": {
     "raindrop": {
       "command": "npx",
-      "args": ["raindrop-mcp"],
+      "args": ["@briansunter/raindrop-mcp"],
       "env": {
         "RAINDROP_TOKEN": "your-token-here"
       }
@@ -211,7 +216,7 @@ Edit your Claude Desktop config file:
 
 Set the `RAINDROP_TOKEN` environment variable and run:
 ```bash
-npx raindrop-mcp
+npx @briansunter/raindrop-mcp
 ```
 
 The server runs on stdio transport and works with any MCP-compatible client.

@@ -1,5 +1,5 @@
 {
-  "name": "raindrop-mcp",
+  "name": "@briansunter/raindrop-mcp",
   "version": "1.0.0",
   "description": "MCP server for Raindrop.io API integration",
   "main": "dist/index.js",
@@ -8,7 +8,8 @@
   "license": "MIT",
   "author": "MCP Raindrop Contributors",
   "bin": {
-    "raindrop-mcp": "dist/index.js"
+    "raindrop-mcp": "dist/index.js",
+    "briansunter-raindrop-mcp": "dist/index.js"
   },
   "files": [
     "dist",
