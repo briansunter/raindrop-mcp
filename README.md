@@ -31,7 +31,24 @@ A Model Context Protocol (MCP) server that provides integration with the Raindro
 
 ## Installation
 
+### For Users
+
+Install via npm:
 ```bash
+npm install -g raindrop-mcp
+```
+
+Or use directly with npx (no installation needed):
+```bash
+npx raindrop-mcp
+```
+
+### For Development
+
+Clone and build from source:
+```bash
+git clone https://github.com/briansunter/raindrop-mcp.git
+cd raindrop-mcp
 npm install
 npm run build
 ```
@@ -62,13 +79,13 @@ cp .env.example .env
 
 Add one of the following configurations to your Claude Desktop settings:
 
-#### Option 1: Using Node.js (Recommended)
+#### Option 1: Using NPX (Recommended for published package)
 ```json
 {
   "mcpServers": {
     "raindrop": {
-      "command": "node",
-      "args": ["/path/to/raindrop-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["raindrop-mcp"],
       "env": {
         "RAINDROP_TOKEN": "your-raindrop-api-token-here"
       }
@@ -77,13 +94,28 @@ Add one of the following configurations to your Claude Desktop settings:
 }
 ```
 
-#### Option 2: Using Bun
+#### Option 2: Using Node.js (Local development)
+```json
+{
+  "mcpServers": {
+    "raindrop": {
+      "command": "node",
+      "args": ["/absolute/path/to/raindrop-mcp/dist/index.js"],
+      "env": {
+        "RAINDROP_TOKEN": "your-raindrop-api-token-here"
+      }
+    }
+  }
+}
+```
+
+#### Option 3: Using Bun (Alternative)
 ```json
 {
   "mcpServers": {
     "raindrop": {
       "command": "bun",
-      "args": ["run", "/path/to/raindrop-mcp/src/index.ts"],
+      "args": ["run", "/absolute/path/to/raindrop-mcp/src/index.ts"],
       "env": {
         "RAINDROP_TOKEN": "your-raindrop-api-token-here"
       }
@@ -93,9 +125,11 @@ Add one of the following configurations to your Claude Desktop settings:
 ```
 
 **Note**: Make sure to:
-1. Replace `/path/to/raindrop-mcp` with the actual path
-2. Build the project first if using Node.js: `npm run build`
-3. Verify your token is valid (see Troubleshooting below)
+1. For NPX: Install the package globally with `npm install -g raindrop-mcp` or use it directly
+2. For Node.js/Bun: Replace `/absolute/path/to/raindrop-mcp` with the actual absolute path
+3. For Node.js: Build the project first with `npm run build`
+4. Replace `your-raindrop-api-token-here` with your actual token
+5. Verify your token is valid (see Troubleshooting below)
 
 ### Direct Usage
 
@@ -127,41 +161,97 @@ The server runs on stdio transport and can be integrated with any MCP client.
 ### Collections
 
 - **list-collections**: Get all root or nested collections
-  - Supports optional pagination parameters (page, perpage) if API supports it
+  - **fields**: Optional field filtering (array of field names like `['_id', 'title', 'count']`)
 - **get-collection**: Get details of a specific collection
+  - **fields**: Optional field filtering
 - **create-collection**: Create a new collection
+  - **minimal**: Return just "ok" instead of full response (saves tokens)
 - **update-collection**: Update an existing collection
+  - **minimal**: Return just "ok" instead of full response
 - **delete-collection**: Delete a collection
+  - **minimal**: Return just "ok" instead of full response
 
 ### Raindrops (Bookmarks)
 
 - **list-raindrops**: Get bookmarks from a collection
-  - Pagination: page (starting from 0), perpage (max 50, default 25)
+  - **Pagination**: `page` (starting from 0), `perpage` (max 50, default 25)
+  - **Field selection**: Use presets or custom field arrays (see below)
+  - **Sorting**: `-created`, `created`, `score`, `-sort`, `title`, `-title`, `domain`, `-domain`
+  - **nested**: Include bookmarks from nested collections
 - **get-raindrop**: Get a specific bookmark
+  - **Field selection**: Use presets or custom field arrays
 - **create-raindrop**: Create a new bookmark
+  - **minimal**: Return just "ok" instead of full response
 - **update-raindrop**: Update an existing bookmark
+  - **fields**: Optional field filtering for response
+  - **minimal**: Return just "ok" instead of full response
 - **delete-raindrop**: Delete a bookmark
+  - **minimal**: Return just "ok" instead of full response
 - **search-raindrops**: Search bookmarks using Raindrop.io's search syntax
-  - Pagination: page (starting from 0), perpage (max 50, default 25)
+  - **Pagination**: `page` (starting from 0), `perpage` (max 50, default 25)
+  - **Field selection**: Use presets or custom field arrays
+  - **Sorting**: Same options as list-raindrops
 
 ### Tags
 
 - **list-tags**: Get all tags or tags from a specific collection
+  - **fields**: Optional field filtering (e.g., `['_id', 'count']`)
 - **merge-tags**: Merge multiple tags into one, or rename a single tag
-  - Can merge multiple tags (e.g., ["javascript", "js"] → "JavaScript")
-  - Can rename a single tag (e.g., ["python"] → "Python")
+  - Can merge multiple tags (e.g., `["javascript", "js"]` → `"JavaScript"`)
+  - Can rename a single tag (e.g., `["python"]` → `"Python"`)
   - Optional: limit to specific collection
+  - **minimal**: Return just "ok" instead of full response
 - **delete-tags**: Delete one or more tags
+  - **minimal**: Return just "ok" instead of full response
 
 ### Highlights
 
 - **list-highlights**: Get highlights from all bookmarks or specific collection
-  - Pagination: page (starting from 0), perpage (max 50, default 25)
+  - **Pagination**: `page` (starting from 0), `perpage` (max 50, default 25)
+  - **fields**: Optional field filtering (e.g., `['_id', 'text', 'color', 'note']`)
 
 ### Utilities
 
 - **parse-url**: Parse and extract metadata from a URL
 - **check-url-exists**: Check if URLs are already saved in your account
+
+## Field Selection & Presets
+
+Many tools support field filtering to reduce response size and save tokens. You can use:
+
+### Field Presets (for Raindrops)
+
+- **minimal**: `_id`, `link`, `title`
+- **basic**: `_id`, `link`, `title`, `excerpt`, `tags`, `created`, `domain`
+- **standard**: `_id`, `link`, `title`, `excerpt`, `note`, `tags`, `type`, `cover`, `created`, `lastUpdate`, `domain`, `important`
+- **media**: `_id`, `link`, `title`, `cover`, `media`, `type`, `file`
+- **organization**: `_id`, `title`, `tags`, `collection`, `collectionId`, `sort`, `removed`
+- **metadata**: `_id`, `created`, `lastUpdate`, `creatorRef`, `user`, `broken`, `cache`
+
+### Custom Field Arrays
+
+Specify exactly which fields you want:
+```json
+{
+  "fields": ["_id", "title", "link", "tags"]
+}
+```
+
+### Empty Array
+
+Return only metadata (no item/items):
+```json
+{
+  "fields": []
+}
+```
+
+## Minimal Responses
+
+Many tools support a `minimal` parameter that returns just `"ok"` instead of the full response. This is useful for:
+- Bulk operations where you don't need the response data
+- Saving tokens in conversations
+- Faster responses when you only care about success/failure
 
 ## Example Usage
 
@@ -174,12 +264,13 @@ The server runs on stdio transport and can be integrated with any MCP client.
     "link": "https://example.com",
     "title": "Example Website",
     "tags": ["example", "demo"],
-    "collectionId": 0
+    "collectionId": 0,
+    "minimal": true
   }
 }
 ```
 
-### Searching bookmarks
+### Searching bookmarks with field filtering
 
 ```json
 {
@@ -187,7 +278,34 @@ The server runs on stdio transport and can be integrated with any MCP client.
   "arguments": {
     "search": "#development site:github.com",
     "collectionId": 0,
-    "perpage": 50
+    "perpage": 50,
+    "fields": "minimal"
+  }
+}
+```
+
+Or with custom fields:
+```json
+{
+  "tool": "search-raindrops",
+  "arguments": {
+    "search": "#development",
+    "fields": ["_id", "link", "title", "tags"]
+  }
+}
+```
+
+### Listing raindrops with pagination
+
+```json
+{
+  "tool": "list-raindrops",
+  "arguments": {
+    "collectionId": 0,
+    "page": 0,
+    "perpage": 25,
+    "sort": "-created",
+    "fields": "basic"
   }
 }
 ```
@@ -200,7 +318,8 @@ The server runs on stdio transport and can be integrated with any MCP client.
   "arguments": {
     "title": "My New Collection",
     "view": "grid",
-    "public": false
+    "public": false,
+    "minimal": true
   }
 }
 ```
@@ -215,7 +334,8 @@ Merge multiple tags into one:
   "tool": "merge-tags",
   "arguments": {
     "tags": ["javascript", "js", "JS"],
-    "newTag": "JavaScript"
+    "newTag": "JavaScript",
+    "minimal": true
   }
 }
 ```
@@ -235,24 +355,6 @@ Rename a single tag:
 - ❌ Missing parameters: Both `tags` (array) and `newTag` (string) must be provided
 - ❌ Empty tags array: Must include at least one tag to merge
 - ❌ Empty newTag string: The new tag name cannot be empty
-
-## Pagination
-
-The following tools support pagination for handling large result sets:
-
-- **list-raindrops**, **search-raindrops**: Full pagination support
-  - `page`: Page number starting from 0
-  - `perpage`: Items per page (1-50, default 25)
-- **list-highlights**: Full pagination support
-  - `page`: Page number starting from 0
-  - `perpage`: Items per page (1-50, default 25)
-- **list-collections**, **list-tags**: Optional pagination
-  - These endpoints may not support pagination in the API but parameters are accepted for future compatibility
-
-When using pagination, responses typically include:
-- `count`: Total number of items
-- `items`: Array of results for current page
-- `collectionId`: Collection context (when applicable)
 
 ## Search Operators
 
