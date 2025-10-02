@@ -21,15 +21,53 @@ interface RaindropApiError {
 
 // Field presets for common use cases
 const FIELD_PRESETS = {
-  minimal: ['_id', 'link', 'title'],
-  basic: ['_id', 'link', 'title', 'excerpt', 'tags', 'created', 'domain'],
-  standard: ['_id', 'link', 'title', 'excerpt', 'note', 'tags', 'type', 'cover', 'created', 'lastUpdate', 'domain', 'important'],
-  media: ['_id', 'link', 'title', 'cover', 'media', 'type', 'file'],
-  organization: ['_id', 'title', 'tags', 'collection', 'collectionId', 'sort', 'removed'],
-  metadata: ['_id', 'created', 'lastUpdate', 'creatorRef', 'user', 'broken', 'cache'],
+  minimal: ["_id", "link", "title"],
+  basic: ["_id", "link", "title", "excerpt", "tags", "created", "domain"],
+  standard: ["_id", "link", "title", "excerpt", "note", "tags", "type", "cover", "created", "lastUpdate", "domain", "important"],
+  media: ["_id", "link", "title", "cover", "media", "type", "file"],
+  organization: ["_id", "title", "tags", "collection", "collectionId", "sort", "removed"],
+  metadata: ["_id", "created", "lastUpdate", "creatorRef", "user", "broken", "cache"],
 } as const;
 
 type FieldPreset = keyof typeof FIELD_PRESETS;
+
+// Helper function to clean up titles by removing surrounding quotes
+function cleanTitle(title: string): string {
+  if (typeof title !== "string") {return title;}
+
+  // Remove surrounding double quotes (e.g., ""Title"" -> "Title")
+  let cleaned = title.trim();
+
+  // Check if string starts and ends with the same quote character
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+      (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+
+  return cleaned;
+}
+
+// Helper function to clean titles in objects recursively
+function cleanTitlesInData(data: any): any {
+  if (!data || typeof data !== "object") {return data;}
+
+  if (Array.isArray(data)) {
+    return data.map(item => cleanTitlesInData(item));
+  }
+
+  const cleaned: any = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (key === "title" && typeof value === "string") {
+      cleaned[key] = cleanTitle(value);
+    } else if (typeof value === "object" && value !== null) {
+      cleaned[key] = cleanTitlesInData(value);
+    } else {
+      cleaned[key] = value;
+    }
+  }
+
+  return cleaned;
+}
 
 // Helper function to safely parse JSON in preprocessing
 function safeJsonParse(val: any): any {
@@ -41,11 +79,16 @@ function safeJsonParse(val: any): any {
   if (val === undefined || val === null) {
     return val;
   }
-  // If string, try to parse as JSON
-  if (typeof val === 'string') {
+  // If string, check if it's a preset value first before trying JSON parse
+  if (typeof val === "string") {
+    // Check if it's a field preset - if so, return as-is
+    if (val in FIELD_PRESETS) {
+      return val;
+    }
+    // Otherwise try to parse as JSON
     try {
       return JSON.parse(val);
-    } catch (e) {
+    } catch (_e) {
       // Return undefined on parse error so Zod's optional() handles it
       return undefined;
     }
@@ -56,17 +99,17 @@ function safeJsonParse(val: any): any {
 
 // Helper function to filter object fields
 function filterFields(obj: any, fields?: string[] | FieldPreset): any {
-  if (!fields) return obj;
+  if (!fields) {return obj;}
 
   // If it's a preset name, get the fields from preset
-  const fieldList = typeof fields === 'string' && fields in FIELD_PRESETS
+  const fieldList = typeof fields === "string" && fields in FIELD_PRESETS
     ? FIELD_PRESETS[fields as FieldPreset]
     : fields as string[];
 
-  if (!Array.isArray(fieldList)) return obj;
+  if (!Array.isArray(fieldList)) {return obj;}
 
   // Empty array means filter out all fields - return empty object
-  if (fieldList.length === 0) return {};
+  if (fieldList.length === 0) {return {};}
 
   // Handle single object
   if (!Array.isArray(obj)) {
@@ -93,16 +136,16 @@ function filterFields(obj: any, fields?: string[] | FieldPreset): any {
 
 // Helper function to apply field filtering to API responses
 function filterApiResponse(data: any, fields?: string[] | FieldPreset): any {
-  if (!fields) return data;
+  if (!fields) {return data;}
 
   // Resolve preset to array if needed
-  const fieldList = typeof fields === 'string' && fields in FIELD_PRESETS
+  const fieldList = typeof fields === "string" && fields in FIELD_PRESETS
     ? FIELD_PRESETS[fields as FieldPreset]
     : fields as string[];
 
   // For empty array, return only top-level metadata (remove item/items)
   if (Array.isArray(fieldList) && fieldList.length === 0) {
-    const { item, items, ...metadata } = data;
+    const { item: _item, items: _items, ...metadata } = data;
     return metadata;
   }
 
@@ -115,7 +158,7 @@ function filterApiResponse(data: any, fields?: string[] | FieldPreset): any {
   }
 
   // For responses with item object (e.g., single raindrop)
-  if (data.item && typeof data.item === 'object') {
+  if (data.item && typeof data.item === "object") {
     return {
       ...data,
       item: filterFields(data.item, fields)
@@ -145,7 +188,7 @@ class RaindropClient {
     let data: any;
     try {
       data = await response.json() as any;
-    } catch (e) {
+    } catch (_e) {
       throw new Error(`Failed to parse JSON response: ${response.status} ${response.statusText}`);
     }
 
@@ -156,7 +199,8 @@ class RaindropClient {
       );
     }
 
-    return data;
+    // Clean up titles in the response data
+    return cleanTitlesInData(data);
   }
 
   // Collections API
@@ -423,6 +467,7 @@ server.registerTool(
       view: z.enum(["list", "simple", "grid", "masonry"]).default("list").describe("View style"),
       public: z.boolean().default(false).describe("Make collection public"),
       cover: z.array(z.string()).optional().describe("Collection cover URL"),
+      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
     },
   },
   async (params) => {
@@ -432,12 +477,24 @@ server.registerTool(
         view: params.view,
         public: params.public,
       };
-      
-      if (params.description) data.description = params.description;
-      if (params.parentId) data.parent = { $id: params.parentId };
-      if (params.cover) data.cover = params.cover;
-      
+
+      if (params.description) {data.description = params.description;}
+      if (params.parentId) {data.parent = { $id: params.parentId };}
+      if (params.cover) {data.cover = params.cover;}
+
       const result = await client.createCollection(data);
+
+      if (params.minimal) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "ok",
+            },
+          ],
+        };
+      }
+
       return {
         content: [
           {
@@ -473,21 +530,34 @@ server.registerTool(
       view: z.enum(["list", "simple", "grid", "masonry"]).optional().describe("View style"),
       public: z.boolean().optional().describe("Make collection public/private"),
       expanded: z.boolean().optional().describe("Expand/collapse sub-collections"),
+      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
     },
   },
   async (params) => {
     try {
-      const { id, ...data } = params;
+      const { id, minimal, ...data } = params;
       const updateData: any = {};
-      
-      if (data.title !== undefined) updateData.title = data.title;
-      if (data.description !== undefined) updateData.description = data.description;
-      if (data.parentId !== undefined) updateData.parent = { $id: data.parentId };
-      if (data.view !== undefined) updateData.view = data.view;
-      if (data.public !== undefined) updateData.public = data.public;
-      if (data.expanded !== undefined) updateData.expanded = data.expanded;
-      
+
+      if (data.title !== undefined) {updateData.title = data.title;}
+      if (data.description !== undefined) {updateData.description = data.description;}
+      if (data.parentId !== undefined) {updateData.parent = { $id: data.parentId };}
+      if (data.view !== undefined) {updateData.view = data.view;}
+      if (data.public !== undefined) {updateData.public = data.public;}
+      if (data.expanded !== undefined) {updateData.expanded = data.expanded;}
+
       const result = await client.updateCollection(id, updateData);
+
+      if (minimal) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "ok",
+            },
+          ],
+        };
+      }
+
       return {
         content: [
           {
@@ -517,16 +587,17 @@ server.registerTool(
     description: "Remove a collection and all its descendants. Raindrops will be moved to Trash.",
     inputSchema: {
       id: z.number().describe("Collection ID to delete"),
+      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
     },
   },
-  async ({ id }) => {
+  async ({ id, minimal }) => {
     try {
-      const result = await client.deleteCollection(id);
+      const _result = await client.deleteCollection(id);
       return {
         content: [
           {
             type: "text",
-            text: "Collection deleted successfully",
+            text: minimal ? "ok" : "Collection deleted successfully",
           },
         ],
       };
@@ -652,6 +723,7 @@ server.registerTool(
       collectionId: z.number().optional().describe("Collection ID (default: -1 for Unsorted)"),
       important: z.boolean().optional().describe("Mark as favorite"),
       pleaseParse: z.boolean().default(true).describe("Auto-parse metadata from URL"),
+      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
     },
   },
   async (params) => {
@@ -659,18 +731,30 @@ server.registerTool(
       const data: any = {
         link: params.link,
       };
-      
-      if (params.title) data.title = params.title;
-      if (params.excerpt) data.excerpt = params.excerpt;
-      if (params.note) data.note = params.note;
-      if (params.tags) data.tags = params.tags;
+
+      if (params.title) {data.title = params.title;}
+      if (params.excerpt) {data.excerpt = params.excerpt;}
+      if (params.note) {data.note = params.note;}
+      if (params.tags) {data.tags = params.tags;}
       if (params.collectionId !== undefined) {
         data.collection = { $id: params.collectionId };
       }
-      if (params.important !== undefined) data.important = params.important;
-      if (params.pleaseParse) data.pleaseParse = {};
-      
+      if (params.important !== undefined) {data.important = params.important;}
+      if (params.pleaseParse) {data.pleaseParse = {};}
+
       const result = await client.createRaindrop(data);
+
+      if (params.minimal) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "ok",
+            },
+          ],
+        };
+      }
+
       return {
         content: [
           {
@@ -717,12 +801,13 @@ server.registerTool(
           z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
           z.array(z.string())
         ])
-      ).optional().describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata'), array of field names, or empty array [] to return only result status")
+      ).optional().describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata'), array of field names, or empty array [] to return only result status"),
+      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
     },
   },
   async (params) => {
     try {
-      const { id, collectionId, fields, ...data } = params;
+      const { id, collectionId, fields, minimal, ...data } = params;
       const updateData: any = { ...data };
 
       if (collectionId !== undefined) {
@@ -730,6 +815,18 @@ server.registerTool(
       }
 
       const result = await client.updateRaindrop(id, updateData);
+
+      if (minimal) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "ok",
+            },
+          ],
+        };
+      }
+
       const filtered = filterApiResponse(result, fields as string[] | FieldPreset);
       return {
         content: [
@@ -760,16 +857,17 @@ server.registerTool(
     description: "Delete a raindrop/bookmark (moves to Trash, or permanently deletes if already in Trash)",
     inputSchema: {
       id: z.number().describe("Raindrop ID to delete"),
+      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
     },
   },
-  async ({ id }) => {
+  async ({ id, minimal }) => {
     try {
-      const result = await client.deleteRaindrop(id);
+      const _result = await client.deleteRaindrop(id);
       return {
         content: [
           {
             type: "text",
-            text: "Raindrop deleted successfully",
+            text: minimal ? "ok" : "Raindrop deleted successfully",
           },
         ],
       };
@@ -887,9 +985,10 @@ server.registerTool(
       ).describe("List of tag names to merge/rename (can be a single tag or multiple tags)"),
       newTag: z.string().min(1, "New tag name is required and cannot be empty").describe("New tag name to replace all specified tags"),
       collectionId: z.number().optional().describe("Limit operation to specific collection (omit to apply across all collections)"),
+      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space, instead of detailed success message"),
     },
   },
-  async ({ tags, newTag, collectionId }) => {
+  async ({ tags, newTag, collectionId, minimal }) => {
     try {
       // Validate required parameters
       if (!tags || tags.length === 0) {
@@ -899,7 +998,21 @@ server.registerTool(
         throw new Error("Parameter 'newTag' is required and cannot be empty");
       }
 
-      const result = await client.mergeTags(tags, newTag, collectionId);
+      const _result = await client.mergeTags(tags, newTag, collectionId);
+
+      // Return minimal response if requested
+      if (minimal) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "ok",
+            },
+          ],
+        };
+      }
+
+      // Default detailed response
       return {
         content: [
           {
@@ -932,16 +1045,17 @@ server.registerTool(
     inputSchema: {
       tags: z.array(z.string()).describe("Tags to delete"),
       collectionId: z.number().optional().describe("Limit to specific collection"),
+      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
     },
   },
-  async ({ tags, collectionId }) => {
+  async ({ tags, collectionId, minimal }) => {
     try {
-      const result = await client.deleteTags(tags, collectionId);
+      const _result = await client.deleteTags(tags, collectionId);
       return {
         content: [
           {
             type: "text",
-            text: "Tags deleted successfully",
+            text: minimal ? "ok" : "Tags deleted successfully",
           },
         ],
       };
