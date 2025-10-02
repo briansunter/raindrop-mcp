@@ -21,7 +21,7 @@ interface RaindropApiError {
 
 // Field presets for common use cases
 const FIELD_PRESETS = {
-  minimal: ['_id', 'link', 'title', 'created'],
+  minimal: ['_id', 'link', 'title'],
   basic: ['_id', 'link', 'title', 'excerpt', 'tags', 'created', 'domain'],
   standard: ['_id', 'link', 'title', 'excerpt', 'note', 'tags', 'type', 'cover', 'created', 'lastUpdate', 'domain', 'important'],
   media: ['_id', 'link', 'title', 'cover', 'media', 'type', 'file'],
@@ -688,7 +688,7 @@ server.registerTool(
   "update-raindrop",
   {
     title: "Update Raindrop",
-    description: "Update an existing raindrop/bookmark",
+    description: "Update an existing raindrop/bookmark with field selection support",
     inputSchema: {
       id: z.number().describe("Raindrop ID"),
       title: z.string().optional().describe("New title"),
@@ -699,23 +699,40 @@ server.registerTool(
       collectionId: z.number().optional().describe("Move to different collection"),
       important: z.boolean().optional().describe("Mark/unmark as favorite"),
       order: z.number().optional().describe("Sort order position"),
+      fields: z.preprocess(
+        (val) => {
+          if (typeof val === 'string') {
+            try {
+              return JSON.parse(val);
+            } catch {
+              return val;
+            }
+          }
+          return val;
+        },
+        z.union([
+          z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
+          z.array(z.string())
+        ])
+      ).optional().describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata'), array of field names, or empty array [] to return only result status")
     },
   },
   async (params) => {
     try {
-      const { id, collectionId, ...data } = params;
+      const { id, collectionId, fields, ...data } = params;
       const updateData: any = { ...data };
-      
+
       if (collectionId !== undefined) {
         updateData.collection = { $id: collectionId };
       }
-      
+
       const result = await client.updateRaindrop(id, updateData);
+      const filtered = filterApiResponse(result, fields as string[] | FieldPreset);
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(result, null, 2),
+            text: JSON.stringify(filtered, null, 2),
           },
         ],
       };
