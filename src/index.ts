@@ -27,7 +27,7 @@ const FIELD_PRESETS = {
 } as const;
 
 // ============================================================================
-// TYPES
+// TYPES - API Entities
 // ============================================================================
 
 type FieldPreset = keyof typeof FIELD_PRESETS;
@@ -37,6 +37,139 @@ interface RaindropApiError {
   result: false;
   error?: string;
   errorMessage?: string;
+}
+
+interface Collection {
+  _id: number;
+  title: string;
+  description?: string;
+  count: number;
+  public: boolean;
+  view: "list" | "simple" | "grid" | "masonry";
+  cover?: string[];
+  parent?: { $id: number; $ref?: string };
+  expanded?: boolean;
+  sort?: number;
+  creatorRef?: number;
+  created?: string;
+  lastUpdate?: string;
+  user?: { $id: number };
+  [key: string]: unknown;
+}
+
+interface Raindrop {
+  _id: number;
+  link: string;
+  title: string;
+  excerpt?: string;
+  note?: string;
+  tags?: string[];
+  type?: string;
+  cover?: string;
+  media?: Array<{ link: string; type: string }>;
+  file?: { name: string; size: number; type: string };
+  created?: string;
+  lastUpdate?: string;
+  domain?: string;
+  important?: boolean;
+  removed?: boolean;
+  collection?: { $id: number; $ref?: string; oid?: number };
+  collectionId?: number;
+  sort?: number;
+  creatorRef?: number;
+  user?: { $id: number };
+  broken?: boolean;
+  cache?: { status: string; size: number; created: string };
+  [key: string]: unknown;
+}
+
+interface Tag {
+  _id: string;
+  count: number;
+}
+
+interface Highlight {
+  _id: string;
+  text: string;
+  note?: string;
+  color?: string;
+  created?: string;
+  lastUpdate?: string;
+  raindropRef?: number;
+  [key: string]: unknown;
+}
+
+// Response wrapper types
+interface CollectionsResponse {
+  result: boolean;
+  items: Collection[];
+}
+
+interface CollectionResponse {
+  result: boolean;
+  item: Collection;
+}
+
+interface RaindropsResponse {
+  result: boolean;
+  items: Raindrop[];
+  count: number;
+  collectionId: number;
+}
+
+interface RaindropResponse {
+  result: boolean;
+  item: Raindrop;
+}
+
+interface TagsResponse {
+  result: boolean;
+  items: Tag[];
+}
+
+interface HighlightsResponse {
+  result: boolean;
+  items: Highlight[];
+}
+
+interface ParseUrlResponse {
+  result: boolean;
+  item: {
+    title?: string;
+    excerpt?: string;
+    cover?: string;
+    type?: string;
+  };
+}
+
+interface CheckUrlExistsResponse {
+  result: boolean;
+  ids: number[];
+  duplicates: Array<{ _id: number; link: string }>;
+}
+
+type ApiResponse =
+  | CollectionsResponse
+  | CollectionResponse
+  | RaindropsResponse
+  | RaindropResponse
+  | TagsResponse
+  | HighlightsResponse
+  | ParseUrlResponse
+  | CheckUrlExistsResponse
+  | { result: boolean; [key: string]: unknown };
+
+// ============================================================================
+// TYPES - Utility
+// ============================================================================
+
+type JsonPrimitive = string | number | boolean | null;
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+interface ToolResponse {
+  content: Array<{ type: "text"; text: string }>;
+  isError?: boolean;
+  [key: string]: unknown;
 }
 
 // ============================================================================
@@ -56,15 +189,15 @@ function cleanTitle(title: string): string {
   return cleaned;
 }
 
-function cleanTitlesInData(data: any): any {
+function cleanTitlesInData<T>(data: T): T {
   if (!data || typeof data !== "object") {return data;}
 
   if (Array.isArray(data)) {
-    return data.map(item => cleanTitlesInData(item));
+    return data.map(item => cleanTitlesInData(item)) as T;
   }
 
-  const cleaned: any = {};
-  for (const [key, value] of Object.entries(data)) {
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
     if (key === "title" && typeof value === "string") {
       cleaned[key] = cleanTitle(value);
     } else if (typeof value === "object" && value !== null) {
@@ -74,7 +207,7 @@ function cleanTitlesInData(data: any): any {
     }
   }
 
-  return cleaned;
+  return cleaned as T;
 }
 
 // ============================================================================
@@ -87,52 +220,57 @@ function resolveFieldList(fields: FieldFilter): string[] {
     : fields as string[];
 }
 
-function filterObjectFields(obj: any, fieldList: string[]): any {
-  if (fieldList.length === 0) {return {};}
+function filterObjectFields<T extends Record<string, unknown>>(
+  obj: T,
+  fieldList: string[]
+): Partial<T> {
+  if (fieldList.length === 0) {return {} as Partial<T>;}
 
-  const filtered: any = {};
+  const filtered: Partial<T> = {};
   for (const field of fieldList) {
     if (field in obj) {
-      filtered[field] = obj[field];
+      filtered[field as keyof T] = obj[field as keyof T];
     }
   }
   return filtered;
 }
 
-function filterFields(data: any, fields?: FieldFilter): any {
+function filterFields<T extends Record<string, unknown>>(
+  data: T | T[],
+  fields?: FieldFilter
+): T | T[] | Partial<T> | Partial<T>[] {
   if (!fields) {return data;}
 
   const fieldList = resolveFieldList(fields);
 
   if (Array.isArray(data)) {
-    return data.map((item: any) => filterObjectFields(item, fieldList));
+    return data.map((item) => filterObjectFields(item, fieldList));
   }
 
   return filterObjectFields(data, fieldList);
 }
 
-function filterApiResponse(data: any, fields?: FieldFilter): any {
+function filterApiResponse<T extends ApiResponse>(
+  data: T,
+  fields?: FieldFilter
+): T | Partial<T> {
   if (!fields) {return data;}
 
   const fieldList = resolveFieldList(fields);
 
   // For empty array, return only top-level metadata
   if (fieldList.length === 0) {
-    const { item: _item, items: _items, ...metadata } = data;
-    return metadata;
+    const { item: _item, items: _items, ...metadata } = data as Record<string, unknown>;
+    return metadata as Partial<T>;
   }
 
   // Handle different response structures
-  if (data.items && Array.isArray(data.items)) {
-    return { ...data, items: filterFields(data.items, fields) };
+  if ("items" in data && Array.isArray(data.items)) {
+    return { ...data, items: filterFields(data.items as Record<string, unknown>[], fields) } as T;
   }
 
-  if (data.item && typeof data.item === "object") {
-    return { ...data, item: filterFields(data.item, fields) };
-  }
-
-  if (Array.isArray(data)) {
-    return filterFields(data, fields);
+  if ("item" in data && typeof data.item === "object" && data.item !== null) {
+    return { ...data, item: filterFields(data.item as Record<string, unknown>, fields) } as T;
   }
 
   return data;
@@ -142,7 +280,7 @@ function filterApiResponse(data: any, fields?: FieldFilter): any {
 // SCHEMA PREPROCESSING & COMMON SCHEMAS
 // ============================================================================
 
-function safeJsonParse(val: any): any {
+function safeJsonParse(val: unknown): unknown {
   if (Array.isArray(val) || val === undefined || val === null) {
     return val;
   }
@@ -152,7 +290,7 @@ function safeJsonParse(val: any): any {
       return val;
     }
     try {
-      return JSON.parse(val);
+      return JSON.parse(val) as unknown;
     } catch {
       return undefined;
     }
@@ -183,6 +321,259 @@ const paginationSchemas = {
 
 const sortOrderSchema = z.enum(["-created", "created", "score", "-sort", "title", "-title", "domain", "-domain"]).optional();
 
+// Input schemas for tools
+const listCollectionsSchema = {
+  root: z.boolean().default(true).describe("Get root collections (true) or nested collections (false)"),
+  fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'title', 'count', 'public', 'parent'])")
+};
+
+const getCollectionSchema = {
+  id: z.number().describe("Collection ID"),
+  fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'title', 'count', 'public', 'parent'])")
+};
+
+const createCollectionSchema = {
+  title: z.string().describe("Name of the collection"),
+  description: z.string().optional().describe("Collection description"),
+  parentId: z.number().optional().describe("Parent collection ID for nested collections"),
+  view: z.enum(["list", "simple", "grid", "masonry"]).default("list").describe("View style"),
+  public: z.boolean().default(false).describe("Make collection public"),
+  cover: z.array(z.string()).optional().describe("Collection cover URL"),
+  minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
+};
+
+const updateCollectionSchema = {
+  id: z.number().describe("Collection ID"),
+  title: z.string().optional().describe("New name of the collection"),
+  description: z.string().optional().describe("New description"),
+  parentId: z.number().optional().describe("New parent collection ID"),
+  view: z.enum(["list", "simple", "grid", "masonry"]).optional().describe("View style"),
+  public: z.boolean().optional().describe("Make collection public/private"),
+  expanded: z.boolean().optional().describe("Expand/collapse sub-collections"),
+  minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
+};
+
+const deleteCollectionSchema = {
+  id: z.number().describe("Collection ID to delete"),
+  minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
+};
+
+const listRaindropsSchema = {
+  collectionId: z.number().describe("Collection ID (0 for all, -1 for Unsorted, -99 for Trash)"),
+  page: paginationSchemas.page.describe("Page number (starts from 0)"),
+  perpage: paginationSchemas.perpage.describe("Items per page (max 50)"),
+  sort: sortOrderSchema.describe("Sort order"),
+  search: z.string().optional().describe("Search query"),
+  nested: z.boolean().optional().describe("Include bookmarks from nested collections"),
+  fields: fieldPresetOrArraySchema.describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
+};
+
+const getRaindropSchema = {
+  id: z.number().describe("Raindrop ID"),
+  fields: fieldPresetOrArraySchema.describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
+};
+
+const createRaindropSchema = {
+  link: z.string().describe("URL of the bookmark"),
+  title: z.string().optional().describe("Title (will be auto-parsed if not provided)"),
+  excerpt: z.string().optional().describe("Description/excerpt"),
+  note: z.string().optional().describe("Personal note"),
+  tags: tagsArraySchema.describe("Tags for the bookmark"),
+  collectionId: z.number().optional().describe("Collection ID (default: -1 for Unsorted)"),
+  important: z.boolean().optional().describe("Mark as favorite"),
+  pleaseParse: z.boolean().default(true).describe("Auto-parse metadata from URL"),
+  minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
+};
+
+const updateRaindropSchema = {
+  id: z.number().describe("Raindrop ID"),
+  title: z.string().optional().describe("New title"),
+  excerpt: z.string().optional().describe("New description"),
+  note: z.string().optional().describe("New note"),
+  tags: tagsArraySchema.describe("New tags (replaces existing)"),
+  link: z.string().optional().describe("New URL"),
+  collectionId: z.number().optional().describe("Move to different collection"),
+  important: z.boolean().optional().describe("Mark/unmark as favorite"),
+  order: z.number().optional().describe("Sort order position"),
+  fields: fieldPresetOrArraySchema.describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata'), array of field names, or empty array [] to return only result status"),
+  minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
+};
+
+const deleteRaindropSchema = {
+  id: z.number().describe("Raindrop ID to delete"),
+  minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
+};
+
+const searchRaindropsSchema = {
+  search: z.string().describe("Search query (supports operators like #tag, site:example.com, etc.)"),
+  collectionId: z.number().default(0).describe("Collection to search in (0 for all)"),
+  page: paginationSchemas.page.describe("Page number (starts from 0)"),
+  perpage: paginationSchemas.perpage.describe("Items per page (max 50)"),
+  sort: sortOrderSchema.describe("Sort order"),
+  fields: fieldPresetOrArraySchema.describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
+};
+
+const listTagsSchema = {
+  collectionId: z.number().optional().describe("Collection ID (omit for all tags)"),
+  fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'count'])")
+};
+
+const mergeTagsSchema = {
+  tags: z.preprocess(
+    safeJsonParse,
+    z.array(z.string()).min(1, "At least one tag must be specified")
+  ).describe("List of tag names to merge/rename (can be a single tag or multiple tags)"),
+  newTag: z.string().min(1, "New tag name is required and cannot be empty").describe("New tag name to replace all specified tags"),
+  collectionId: z.number().optional().describe("Limit operation to specific collection (omit to apply across all collections)"),
+  minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space, instead of detailed success message"),
+};
+
+const deleteTagsSchema = {
+  tags: z.array(z.string()).describe("Tags to delete"),
+  collectionId: z.number().optional().describe("Limit to specific collection"),
+  minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
+};
+
+const listHighlightsSchema = {
+  collectionId: z.number().optional().describe("Collection ID (omit for all highlights)"),
+  page: paginationSchemas.page.describe("Page number (starts from 0)"),
+  perpage: paginationSchemas.perpage.describe("Items per page (max 50, default 25)"),
+  fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'text', 'color', 'note', 'created'])")
+};
+
+const parseUrlSchema = {
+  url: z.string().describe("URL to parse"),
+};
+
+const checkUrlExistsSchema = {
+  urls: z.array(z.string()).describe("URLs to check"),
+};
+
+// Parameter types for tool handlers
+interface ListCollectionsParams {
+  root: boolean;
+  fields?: string[];
+}
+
+interface GetCollectionParams {
+  id: number;
+  fields?: string[];
+}
+
+interface CreateCollectionParams {
+  title: string;
+  description?: string;
+  parentId?: number;
+  view: "list" | "simple" | "grid" | "masonry";
+  public: boolean;
+  cover?: string[];
+  minimal: boolean;
+}
+
+interface UpdateCollectionParams {
+  id: number;
+  title?: string;
+  description?: string;
+  parentId?: number;
+  view?: "list" | "simple" | "grid" | "masonry";
+  public?: boolean;
+  expanded?: boolean;
+  minimal: boolean;
+}
+
+interface DeleteCollectionParams {
+  id: number;
+  minimal: boolean;
+}
+
+interface ListRaindropsParams {
+  collectionId: number;
+  page: number;
+  perpage: number;
+  sort?: "-created" | "created" | "score" | "-sort" | "title" | "-title" | "domain" | "-domain";
+  search?: string;
+  nested?: boolean;
+  fields?: string[] | FieldPreset;
+}
+
+interface GetRaindropParams {
+  id: number;
+  fields?: string[] | FieldPreset;
+}
+
+interface CreateRaindropParams {
+  link: string;
+  title?: string;
+  excerpt?: string;
+  note?: string;
+  tags?: string[];
+  collectionId?: number;
+  important?: boolean;
+  pleaseParse: boolean;
+  minimal: boolean;
+}
+
+interface UpdateRaindropParams {
+  id: number;
+  title?: string;
+  excerpt?: string;
+  note?: string;
+  tags?: string[];
+  link?: string;
+  collectionId?: number;
+  important?: boolean;
+  order?: number;
+  fields?: string[] | FieldPreset;
+  minimal: boolean;
+}
+
+interface DeleteRaindropParams {
+  id: number;
+  minimal: boolean;
+}
+
+interface SearchRaindropsParams {
+  search: string;
+  collectionId: number;
+  page: number;
+  perpage: number;
+  sort?: "-created" | "created" | "score" | "-sort" | "title" | "-title" | "domain" | "-domain";
+  fields?: string[] | FieldPreset;
+}
+
+interface ListTagsParams {
+  collectionId?: number;
+  fields?: string[];
+}
+
+interface MergeTagsParams {
+  tags: string[];
+  newTag: string;
+  collectionId?: number;
+  minimal: boolean;
+}
+
+interface DeleteTagsParams {
+  tags: string[];
+  collectionId?: number;
+  minimal: boolean;
+}
+
+interface ListHighlightsParams {
+  collectionId?: number;
+  page: number;
+  perpage: number;
+  fields?: string[];
+}
+
+interface ParseUrlParams {
+  url: string;
+}
+
+interface CheckUrlExistsParams {
+  urls: string[];
+}
+
 // ============================================================================
 // RAINDROP API CLIENT
 // ============================================================================
@@ -197,131 +588,156 @@ class RaindropClient {
     };
   }
 
-  private async handleResponse(response: Response): Promise<any> {
-    let data: any;
+  private async handleResponse<T extends ApiResponse>(response: Response): Promise<T> {
+    let data: unknown;
     try {
-      data = await response.json() as any;
+      data = await response.json() as unknown;
     } catch {
       throw new Error(`Failed to parse JSON response: ${response.status} ${response.statusText}`);
     }
 
-    if (!response.ok || data.result === false) {
-      const error = data as RaindropApiError;
+    const parsedData = data as ApiResponse | RaindropApiError;
+
+    if (!response.ok || parsedData.result === false) {
+      const error = parsedData as RaindropApiError;
       throw new Error(
         error.errorMessage || error.error || `API request failed: ${response.status}`
       );
     }
 
-    return cleanTitlesInData(data);
+    return cleanTitlesInData(parsedData) as T;
   }
 
-  private buildUrl(path: string, params?: Record<string, any>): string {
+  private buildUrl(path: string, params?: Record<string, JsonPrimitive>): string {
     const url = `${API_BASE_URL}${path}`;
     if (!params || Object.keys(params).length === 0) {return url;}
 
-    const queryString = new URLSearchParams(params as Record<string, string>).toString();
+    const stringParams: Record<string, string> = {};
+    for (const [key, value] of Object.entries(params)) {
+      stringParams[key] = String(value);
+    }
+    const queryString = new URLSearchParams(stringParams).toString();
     return `${url}?${queryString}`;
   }
 
-  private async request(url: string, options: { method?: string; body?: string } = {}): Promise<any> {
+  private async request<T extends ApiResponse>(
+    url: string,
+    options: { method?: string; body?: string } = {}
+  ): Promise<T> {
     const response = await fetch(url, { ...options, headers: this.headers });
-    return this.handleResponse(response);
+    return this.handleResponse<T>(response);
   }
 
   // Collections API
-  async getCollections(root = true): Promise<any> {
+  async getCollections(root = true): Promise<CollectionsResponse> {
     const endpoint = root ? "/collections" : "/collections/childrens";
-    return this.request(this.buildUrl(endpoint));
+    return this.request<CollectionsResponse>(this.buildUrl(endpoint));
   }
 
-  async getCollection(id: number): Promise<any> {
-    return this.request(this.buildUrl(`/collection/${id}`));
+  async getCollection(id: number): Promise<CollectionResponse> {
+    return this.request<CollectionResponse>(this.buildUrl(`/collection/${id}`));
   }
 
-  async createCollection(data: any): Promise<any> {
-    return this.request(this.buildUrl("/collection"), {
+  async createCollection(data: Partial<Collection> & { title: string }): Promise<CollectionResponse> {
+    return this.request<CollectionResponse>(this.buildUrl("/collection"), {
       method: "POST",
       body: JSON.stringify(data)
     });
   }
 
-  async updateCollection(id: number, data: any): Promise<any> {
-    return this.request(this.buildUrl(`/collection/${id}`), {
+  async updateCollection(id: number, data: Partial<Collection>): Promise<CollectionResponse> {
+    return this.request<CollectionResponse>(this.buildUrl(`/collection/${id}`), {
       method: "PUT",
       body: JSON.stringify(data)
     });
   }
 
-  async deleteCollection(id: number): Promise<any> {
-    return this.request(this.buildUrl(`/collection/${id}`), { method: "DELETE" });
+  async deleteCollection(id: number): Promise<{ result: boolean }> {
+    return this.request<{ result: boolean }>(this.buildUrl(`/collection/${id}`), { method: "DELETE" });
   }
 
   // Raindrops API
-  async getRaindrops(collectionId: number, params?: any): Promise<any> {
-    return this.request(this.buildUrl(`/raindrops/${collectionId}`, params));
+  async getRaindrops(
+    collectionId: number,
+    params?: Record<string, JsonPrimitive>
+  ): Promise<RaindropsResponse> {
+    return this.request<RaindropsResponse>(this.buildUrl(`/raindrops/${collectionId}`, params));
   }
 
-  async getRaindrop(id: number): Promise<any> {
-    return this.request(this.buildUrl(`/raindrop/${id}`));
+  async getRaindrop(id: number): Promise<RaindropResponse> {
+    return this.request<RaindropResponse>(this.buildUrl(`/raindrop/${id}`));
   }
 
-  async createRaindrop(data: any): Promise<any> {
-    return this.request(this.buildUrl("/raindrop"), {
+  async createRaindrop(data: Partial<Raindrop> & { link: string }): Promise<RaindropResponse> {
+    return this.request<RaindropResponse>(this.buildUrl("/raindrop"), {
       method: "POST",
       body: JSON.stringify(data)
     });
   }
 
-  async updateRaindrop(id: number, data: any): Promise<any> {
-    return this.request(this.buildUrl(`/raindrop/${id}`), {
+  async updateRaindrop(id: number, data: Partial<Raindrop>): Promise<RaindropResponse> {
+    return this.request<RaindropResponse>(this.buildUrl(`/raindrop/${id}`), {
       method: "PUT",
       body: JSON.stringify(data)
     });
   }
 
-  async deleteRaindrop(id: number): Promise<any> {
-    return this.request(this.buildUrl(`/raindrop/${id}`), { method: "DELETE" });
+  async deleteRaindrop(id: number): Promise<{ result: boolean }> {
+    return this.request<{ result: boolean }>(this.buildUrl(`/raindrop/${id}`), { method: "DELETE" });
   }
 
-  async searchRaindrops(collectionId: number, search: string, params?: any): Promise<any> {
-    return this.request(this.buildUrl(`/raindrops/${collectionId}`, { search, ...params }));
+  async searchRaindrops(
+    collectionId: number,
+    search: string,
+    params?: Record<string, JsonPrimitive>
+  ): Promise<RaindropsResponse> {
+    return this.request<RaindropsResponse>(
+      this.buildUrl(`/raindrops/${collectionId}`, { search, ...params })
+    );
   }
 
   // Tags API
-  async getTags(collectionId?: number): Promise<any> {
+  async getTags(collectionId?: number): Promise<TagsResponse> {
     const path = collectionId !== undefined ? `/tags/${collectionId}` : "/tags";
-    return this.request(this.buildUrl(path));
+    return this.request<TagsResponse>(this.buildUrl(path));
   }
 
-  async mergeTags(tags: string[], newTag: string, collectionId?: number): Promise<any> {
+  async mergeTags(
+    tags: string[],
+    newTag: string,
+    collectionId?: number
+  ): Promise<{ result: boolean }> {
     const path = collectionId !== undefined ? `/tags/${collectionId}` : "/tags";
-    return this.request(this.buildUrl(path), {
+    return this.request<{ result: boolean }>(this.buildUrl(path), {
       method: "PUT",
       body: JSON.stringify({ tags, replace: newTag })
     });
   }
 
-  async deleteTags(tags: string[], collectionId?: number): Promise<any> {
+  async deleteTags(tags: string[], collectionId?: number): Promise<{ result: boolean }> {
     const path = collectionId !== undefined ? `/tags/${collectionId}` : "/tags";
-    return this.request(this.buildUrl(path), {
+    return this.request<{ result: boolean }>(this.buildUrl(path), {
       method: "DELETE",
       body: JSON.stringify({ tags })
     });
   }
 
   // Highlights API
-  async getHighlights(collectionId?: number, params?: any): Promise<any> {
+  async getHighlights(
+    collectionId?: number,
+    params?: Record<string, JsonPrimitive>
+  ): Promise<HighlightsResponse> {
     const path = collectionId !== undefined ? `/highlights/${collectionId}` : "/highlights";
-    return this.request(this.buildUrl(path, params));
+    return this.request<HighlightsResponse>(this.buildUrl(path, params));
   }
 
   // Import/Export API
-  async parseUrl(url: string): Promise<any> {
-    return this.request(this.buildUrl("/import/url/parse", { url }));
+  async parseUrl(url: string): Promise<ParseUrlResponse> {
+    return this.request<ParseUrlResponse>(this.buildUrl("/import/url/parse", { url }));
   }
 
-  async checkUrlExists(urls: string[]): Promise<any> {
-    return this.request(this.buildUrl("/import/url/exists"), {
+  async checkUrlExists(urls: string[]): Promise<CheckUrlExistsResponse> {
+    return this.request<CheckUrlExistsResponse>(this.buildUrl("/import/url/exists"), {
       method: "POST",
       body: JSON.stringify({ urls })
     });
@@ -332,15 +748,15 @@ class RaindropClient {
 // RESPONSE HELPERS
 // ============================================================================
 
-function createSuccessResponse(text: string) {
+function createSuccessResponse(text: string): ToolResponse {
   return { content: [{ type: "text", text }] };
 }
 
-function createJsonResponse(data: any) {
+function createJsonResponse(data: JsonValue): ToolResponse {
   return createSuccessResponse(JSON.stringify(data, null, 2));
 }
 
-function createErrorResponse(error: unknown) {
+function createErrorResponse(error: unknown): ToolResponse {
   const message = error instanceof Error ? error.message : String(error);
   return {
     content: [{ type: "text", text: `Error: ${message}` }],
@@ -348,11 +764,11 @@ function createErrorResponse(error: unknown) {
   };
 }
 
-function handleMinimalResponse(data: any, minimal?: boolean) {
+function handleMinimalResponse<T extends JsonValue>(data: T, minimal?: boolean): ToolResponse {
   return minimal ? createSuccessResponse("ok") : createJsonResponse(data);
 }
 
-function handleMessageResponse(message: string, minimal?: boolean) {
+function handleMessageResponse(message: string, minimal?: boolean): ToolResponse {
   return createSuccessResponse(minimal ? "ok" : message);
 }
 
@@ -360,8 +776,8 @@ function handleMessageResponse(message: string, minimal?: boolean) {
 // TOOL REGISTRATION WRAPPER
 // ============================================================================
 
-function toolHandler<T>(handler: (params: T) => Promise<any>) {
-  return async (params: T) => {
+function toolHandler<T>(handler: (params: T) => Promise<ToolResponse>) {
+  return async (params: T): Promise<ToolResponse> => {
     try {
       return await handler(params);
     } catch (error) {
@@ -390,15 +806,12 @@ server.registerTool(
   {
     title: "List Collections",
     description: "Get all root or nested collections (Note: Collections API returns all collections without pagination)",
-    inputSchema: {
-      root: z.boolean().default(true).describe("Get root collections (true) or nested collections (false)"),
-      fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'title', 'count', 'public', 'parent'])")
-    },
+    inputSchema: listCollectionsSchema,
   },
-  toolHandler(async ({ root, fields }: any) => {
+  toolHandler<ListCollectionsParams>(async ({ root, fields }) => {
     const result = await client.getCollections(root);
-    const filtered = filterApiResponse(result, fields as FieldFilter);
-    return createJsonResponse(filtered);
+    const filtered = filterApiResponse(result, fields);
+    return createJsonResponse(filtered as JsonValue);
   })
 );
 
@@ -407,15 +820,12 @@ server.registerTool(
   {
     title: "Get Collection",
     description: "Get details of a specific collection with field selection support",
-    inputSchema: {
-      id: z.number().describe("Collection ID"),
-      fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'title', 'count', 'public', 'parent'])")
-    },
+    inputSchema: getCollectionSchema,
   },
-  toolHandler(async ({ id, fields }: any) => {
+  toolHandler<GetCollectionParams>(async ({ id, fields }) => {
     const result = await client.getCollection(id);
-    const filtered = filterApiResponse(result, fields as FieldFilter);
-    return createJsonResponse(filtered);
+    const filtered = filterApiResponse(result, fields);
+    return createJsonResponse(filtered as JsonValue);
   })
 );
 
@@ -424,18 +834,10 @@ server.registerTool(
   {
     title: "Create Collection",
     description: "Create a new collection",
-    inputSchema: {
-      title: z.string().describe("Name of the collection"),
-      description: z.string().optional().describe("Collection description"),
-      parentId: z.number().optional().describe("Parent collection ID for nested collections"),
-      view: z.enum(["list", "simple", "grid", "masonry"]).default("list").describe("View style"),
-      public: z.boolean().default(false).describe("Make collection public"),
-      cover: z.array(z.string()).optional().describe("Collection cover URL"),
-      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
-    },
+    inputSchema: createCollectionSchema,
   },
-  toolHandler(async (params: any) => {
-    const data: any = {
+  toolHandler<CreateCollectionParams>(async (params) => {
+    const data: Partial<Collection> & { title: string } = {
       title: params.title,
       view: params.view,
       public: params.public,
@@ -446,7 +848,7 @@ server.registerTool(
     if (params.cover) {data.cover = params.cover;}
 
     const result = await client.createCollection(data);
-    return handleMinimalResponse(result, params.minimal);
+    return handleMinimalResponse(result as unknown as JsonValue, params.minimal);
   })
 );
 
@@ -455,19 +857,10 @@ server.registerTool(
   {
     title: "Update Collection",
     description: "Update an existing collection",
-    inputSchema: {
-      id: z.number().describe("Collection ID"),
-      title: z.string().optional().describe("New name of the collection"),
-      description: z.string().optional().describe("New description"),
-      parentId: z.number().optional().describe("New parent collection ID"),
-      view: z.enum(["list", "simple", "grid", "masonry"]).optional().describe("View style"),
-      public: z.boolean().optional().describe("Make collection public/private"),
-      expanded: z.boolean().optional().describe("Expand/collapse sub-collections"),
-      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
-    },
+    inputSchema: updateCollectionSchema,
   },
-  toolHandler(async ({ id, minimal, ...fields }: any) => {
-    const data: any = {};
+  toolHandler<UpdateCollectionParams>(async ({ id, minimal, ...fields }) => {
+    const data: Partial<Collection> = {};
 
     if (fields.title !== undefined) {data.title = fields.title;}
     if (fields.description !== undefined) {data.description = fields.description;}
@@ -477,7 +870,7 @@ server.registerTool(
     if (fields.expanded !== undefined) {data.expanded = fields.expanded;}
 
     const result = await client.updateCollection(id, data);
-    return handleMinimalResponse(result, minimal);
+    return handleMinimalResponse(result as unknown as JsonValue, minimal);
   })
 );
 
@@ -486,12 +879,9 @@ server.registerTool(
   {
     title: "Delete Collection",
     description: "Remove a collection and all its descendants. Raindrops will be moved to Trash.",
-    inputSchema: {
-      id: z.number().describe("Collection ID to delete"),
-      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
-    },
+    inputSchema: deleteCollectionSchema,
   },
-  toolHandler(async ({ id, minimal }: any) => {
+  toolHandler<DeleteCollectionParams>(async ({ id, minimal }) => {
     await client.deleteCollection(id);
     return handleMessageResponse("Collection deleted successfully", minimal);
   })
@@ -506,20 +896,16 @@ server.registerTool(
   {
     title: "List Raindrops",
     description: "Get raindrops from a collection with pagination and field selection support",
-    inputSchema: {
-      collectionId: z.number().describe("Collection ID (0 for all, -1 for Unsorted, -99 for Trash)"),
-      page: paginationSchemas.page.describe("Page number (starts from 0)"),
-      perpage: paginationSchemas.perpage.describe("Items per page (max 50)"),
-      sort: sortOrderSchema.describe("Sort order"),
-      search: z.string().optional().describe("Search query"),
-      nested: z.boolean().optional().describe("Include bookmarks from nested collections"),
-      fields: fieldPresetOrArraySchema.describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
-    },
+    inputSchema: listRaindropsSchema,
   },
-  toolHandler(async ({ collectionId, fields, ...queryParams }: any) => {
-    const result = await client.getRaindrops(collectionId, queryParams);
-    const filtered = filterApiResponse(result, fields as FieldFilter);
-    return createJsonResponse(filtered);
+  toolHandler<ListRaindropsParams>(async ({ collectionId, fields, ...queryParams }) => {
+    const params = Object.fromEntries(
+      Object.entries(queryParams).filter(([_, v]) => v !== undefined)
+    ) as Record<string, JsonPrimitive>;
+
+    const result = await client.getRaindrops(collectionId, params);
+    const filtered = filterApiResponse(result, fields);
+    return createJsonResponse(filtered as JsonValue);
   })
 );
 
@@ -528,15 +914,12 @@ server.registerTool(
   {
     title: "Get Raindrop",
     description: "Get a specific raindrop/bookmark by ID with field selection support",
-    inputSchema: {
-      id: z.number().describe("Raindrop ID"),
-      fields: fieldPresetOrArraySchema.describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
-    },
+    inputSchema: getRaindropSchema,
   },
-  toolHandler(async ({ id, fields }: any) => {
+  toolHandler<GetRaindropParams>(async ({ id, fields }) => {
     const result = await client.getRaindrop(id);
-    const filtered = filterApiResponse(result, fields as FieldFilter);
-    return createJsonResponse(filtered);
+    const filtered = filterApiResponse(result, fields);
+    return createJsonResponse(filtered as JsonValue);
   })
 );
 
@@ -545,20 +928,12 @@ server.registerTool(
   {
     title: "Create Raindrop",
     description: "Create a new raindrop/bookmark",
-    inputSchema: {
-      link: z.string().describe("URL of the bookmark"),
-      title: z.string().optional().describe("Title (will be auto-parsed if not provided)"),
-      excerpt: z.string().optional().describe("Description/excerpt"),
-      note: z.string().optional().describe("Personal note"),
-      tags: tagsArraySchema.describe("Tags for the bookmark"),
-      collectionId: z.number().optional().describe("Collection ID (default: -1 for Unsorted)"),
-      important: z.boolean().optional().describe("Mark as favorite"),
-      pleaseParse: z.boolean().default(true).describe("Auto-parse metadata from URL"),
-      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
-    },
+    inputSchema: createRaindropSchema,
   },
-  toolHandler(async (params: any) => {
-    const data: any = { link: params.link };
+  toolHandler<CreateRaindropParams>(async (params) => {
+    const data: Partial<Raindrop> & { link: string; pleaseParse?: Record<string, never> } = {
+      link: params.link
+    };
 
     if (params.title) {data.title = params.title;}
     if (params.excerpt) {data.excerpt = params.excerpt;}
@@ -569,7 +944,7 @@ server.registerTool(
     if (params.pleaseParse) {data.pleaseParse = {};}
 
     const result = await client.createRaindrop(data);
-    return handleMinimalResponse(result, params.minimal);
+    return handleMinimalResponse(result as unknown as JsonValue, params.minimal);
   })
 );
 
@@ -578,22 +953,10 @@ server.registerTool(
   {
     title: "Update Raindrop",
     description: "Update an existing raindrop/bookmark with field selection support",
-    inputSchema: {
-      id: z.number().describe("Raindrop ID"),
-      title: z.string().optional().describe("New title"),
-      excerpt: z.string().optional().describe("New description"),
-      note: z.string().optional().describe("New note"),
-      tags: tagsArraySchema.describe("New tags (replaces existing)"),
-      link: z.string().optional().describe("New URL"),
-      collectionId: z.number().optional().describe("Move to different collection"),
-      important: z.boolean().optional().describe("Mark/unmark as favorite"),
-      order: z.number().optional().describe("Sort order position"),
-      fields: fieldPresetOrArraySchema.describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata'), array of field names, or empty array [] to return only result status"),
-      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
-    },
+    inputSchema: updateRaindropSchema,
   },
-  toolHandler(async ({ id, collectionId, fields, minimal, ...updates }: any) => {
-    const data: any = { ...updates };
+  toolHandler<UpdateRaindropParams>(async ({ id, collectionId, fields, minimal, ...updates }) => {
+    const data: Partial<Raindrop> = { ...updates };
 
     if (collectionId !== undefined) {
       data.collection = { $id: collectionId };
@@ -605,8 +968,8 @@ server.registerTool(
       return createSuccessResponse("ok");
     }
 
-    const filtered = filterApiResponse(result, fields as FieldFilter);
-    return createJsonResponse(filtered);
+    const filtered = filterApiResponse(result, fields);
+    return createJsonResponse(filtered as JsonValue);
   })
 );
 
@@ -615,12 +978,9 @@ server.registerTool(
   {
     title: "Delete Raindrop",
     description: "Delete a raindrop/bookmark (moves to Trash, or permanently deletes if already in Trash)",
-    inputSchema: {
-      id: z.number().describe("Raindrop ID to delete"),
-      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
-    },
+    inputSchema: deleteRaindropSchema,
   },
-  toolHandler(async ({ id, minimal }: any) => {
+  toolHandler<DeleteRaindropParams>(async ({ id, minimal }) => {
     await client.deleteRaindrop(id);
     return handleMessageResponse("Raindrop deleted successfully", minimal);
   })
@@ -631,19 +991,16 @@ server.registerTool(
   {
     title: "Search Raindrops",
     description: "Search for raindrops using Raindrop.io's search syntax with pagination and field selection support",
-    inputSchema: {
-      search: z.string().describe("Search query (supports operators like #tag, site:example.com, etc.)"),
-      collectionId: z.number().default(0).describe("Collection to search in (0 for all)"),
-      page: paginationSchemas.page.describe("Page number (starts from 0)"),
-      perpage: paginationSchemas.perpage.describe("Items per page (max 50)"),
-      sort: sortOrderSchema.describe("Sort order"),
-      fields: fieldPresetOrArraySchema.describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
-    },
+    inputSchema: searchRaindropsSchema,
   },
-  toolHandler(async ({ collectionId, search, fields, ...otherParams }: any) => {
-    const result = await client.searchRaindrops(collectionId, search, otherParams);
-    const filtered = filterApiResponse(result, fields as FieldFilter);
-    return createJsonResponse(filtered);
+  toolHandler<SearchRaindropsParams>(async ({ collectionId, search, fields, ...otherParams }) => {
+    const params = Object.fromEntries(
+      Object.entries(otherParams).filter(([_, v]) => v !== undefined)
+    ) as Record<string, JsonPrimitive>;
+
+    const result = await client.searchRaindrops(collectionId, search, params);
+    const filtered = filterApiResponse(result, fields);
+    return createJsonResponse(filtered as JsonValue);
   })
 );
 
@@ -656,15 +1013,12 @@ server.registerTool(
   {
     title: "List Tags",
     description: "Get all tags or tags from a specific collection (Note: Tags API returns all tags without pagination)",
-    inputSchema: {
-      collectionId: z.number().optional().describe("Collection ID (omit for all tags)"),
-      fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'count'])")
-    },
+    inputSchema: listTagsSchema,
   },
-  toolHandler(async ({ collectionId, fields }: any) => {
+  toolHandler<ListTagsParams>(async ({ collectionId, fields }) => {
     const result = await client.getTags(collectionId);
-    const filtered = filterApiResponse(result, fields as FieldFilter);
-    return createJsonResponse(filtered);
+    const filtered = filterApiResponse(result, fields);
+    return createJsonResponse(filtered as JsonValue);
   })
 );
 
@@ -673,17 +1027,9 @@ server.registerTool(
   {
     title: "Merge/Rename Tags",
     description: "Merge multiple tags into a new tag name, or rename a single tag. All specified tags will be replaced with the new tag name across all bookmarks.",
-    inputSchema: {
-      tags: z.preprocess(
-        safeJsonParse,
-        z.array(z.string()).min(1, "At least one tag must be specified")
-      ).describe("List of tag names to merge/rename (can be a single tag or multiple tags)"),
-      newTag: z.string().min(1, "New tag name is required and cannot be empty").describe("New tag name to replace all specified tags"),
-      collectionId: z.number().optional().describe("Limit operation to specific collection (omit to apply across all collections)"),
-      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space, instead of detailed success message"),
-    },
+    inputSchema: mergeTagsSchema,
   },
-  toolHandler(async ({ tags, newTag, collectionId, minimal }: any) => {
+  toolHandler<MergeTagsParams>(async ({ tags, newTag, collectionId, minimal }) => {
     if (!tags || tags.length === 0) {
       throw new Error("Parameter 'tags' is required and must be a non-empty array of tag names");
     }
@@ -710,13 +1056,9 @@ server.registerTool(
   {
     title: "Delete Tags",
     description: "Delete one or more tags",
-    inputSchema: {
-      tags: z.array(z.string()).describe("Tags to delete"),
-      collectionId: z.number().optional().describe("Limit to specific collection"),
-      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
-    },
+    inputSchema: deleteTagsSchema,
   },
-  toolHandler(async ({ tags, collectionId, minimal }: any) => {
+  toolHandler<DeleteTagsParams>(async ({ tags, collectionId, minimal }) => {
     await client.deleteTags(tags, collectionId);
     return handleMessageResponse("Tags deleted successfully", minimal);
   })
@@ -731,17 +1073,16 @@ server.registerTool(
   {
     title: "List Highlights",
     description: "Get all highlights or highlights from a specific collection with pagination and field selection support",
-    inputSchema: {
-      collectionId: z.number().optional().describe("Collection ID (omit for all highlights)"),
-      page: paginationSchemas.page.describe("Page number (starts from 0)"),
-      perpage: paginationSchemas.perpage.describe("Items per page (max 50, default 25)"),
-      fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'text', 'color', 'note', 'created'])")
-    },
+    inputSchema: listHighlightsSchema,
   },
-  toolHandler(async ({ collectionId, fields, ...queryParams }: any) => {
-    const result = await client.getHighlights(collectionId, queryParams);
-    const filtered = filterApiResponse(result, fields as FieldFilter);
-    return createJsonResponse(filtered);
+  toolHandler<ListHighlightsParams>(async ({ collectionId, fields, ...queryParams }) => {
+    const params = Object.fromEntries(
+      Object.entries(queryParams).filter(([_, v]) => v !== undefined)
+    ) as Record<string, JsonPrimitive>;
+
+    const result = await client.getHighlights(collectionId, params);
+    const filtered = filterApiResponse(result, fields);
+    return createJsonResponse(filtered as JsonValue);
   })
 );
 
@@ -754,13 +1095,11 @@ server.registerTool(
   {
     title: "Parse URL",
     description: "Parse and extract metadata from a URL",
-    inputSchema: {
-      url: z.string().describe("URL to parse"),
-    },
+    inputSchema: parseUrlSchema,
   },
-  toolHandler(async ({ url }: any) => {
+  toolHandler<ParseUrlParams>(async ({ url }) => {
     const result = await client.parseUrl(url);
-    return createJsonResponse(result);
+    return createJsonResponse(result as unknown as JsonValue);
   })
 );
 
@@ -769,13 +1108,11 @@ server.registerTool(
   {
     title: "Check URL Exists",
     description: "Check if URLs are already saved in your Raindrop.io account",
-    inputSchema: {
-      urls: z.array(z.string()).describe("URLs to check"),
-    },
+    inputSchema: checkUrlExistsSchema,
   },
-  toolHandler(async ({ urls }: any) => {
+  toolHandler<CheckUrlExistsParams>(async ({ urls }) => {
     const result = await client.checkUrlExists(urls);
-    return createJsonResponse(result);
+    return createJsonResponse(result as unknown as JsonValue);
   })
 );
 
@@ -783,13 +1120,13 @@ server.registerTool(
 // SERVER STARTUP
 // ============================================================================
 
-async function main() {
+async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Raindrop.io MCP server running on stdio");
 }
 
-main().catch((error) => {
+main().catch((error: unknown) => {
   console.error("Fatal error:", error);
   process.exit(1);
 });
