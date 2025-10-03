@@ -156,14 +156,19 @@ Add `minimal: true` to any create/update/delete operation to just get `"ok"` bac
 npx @briansunter/raindrop-mcp
 ```
 
-Or using the short command:
+### Bunx (Bun users)
 ```bash
-npx raindrop-mcp
+bunx @briansunter/raindrop-mcp
 ```
 
 ### Global Install
 ```bash
 npm install -g @briansunter/raindrop-mcp
+```
+
+Or with Bun:
+```bash
+bun install -g @briansunter/raindrop-mcp
 ```
 
 ### Local Development
@@ -182,12 +187,27 @@ Edit your Claude Desktop config file:
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
 
-**Using NPX** (easiest):
+**Using NPX** (Node.js):
 ```json
 {
   "mcpServers": {
     "raindrop": {
       "command": "npx",
+      "args": ["@briansunter/raindrop-mcp"],
+      "env": {
+        "RAINDROP_TOKEN": "your-token-here"
+      }
+    }
+  }
+}
+```
+
+**Using Bunx** (Bun):
+```json
+{
+  "mcpServers": {
+    "raindrop": {
+      "command": "bunx",
       "args": ["@briansunter/raindrop-mcp"],
       "env": {
         "RAINDROP_TOKEN": "your-token-here"
@@ -214,9 +234,16 @@ Edit your Claude Desktop config file:
 
 ### Other MCP Clients
 
-Set the `RAINDROP_TOKEN` environment variable and run:
+Set the `RAINDROP_TOKEN` environment variable and run with your preferred package runner:
+
+**With NPX:**
 ```bash
 npx @briansunter/raindrop-mcp
+```
+
+**With Bunx:**
+```bash
+bunx @briansunter/raindrop-mcp
 ```
 
 The server runs on stdio transport and works with any MCP-compatible client.
