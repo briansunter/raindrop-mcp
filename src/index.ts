@@ -2,7 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import fetch, { Response } from "node-fetch";
+import fetch, { type Response } from "node-fetch";
 
 // ============================================================================
 // CONFIGURATION & CONSTANTS
@@ -624,8 +624,10 @@ class RaindropClient {
     url: string,
     options: { method?: string; body?: string } = {}
   ): Promise<T> {
-    const response = await fetch(url, { ...options, headers: this.headers });
-    return this.handleResponse<T>(response);
+    // Use globalThis.fetch for testability
+    const fetchFn = (globalThis.fetch as unknown as typeof fetch) || fetch;
+    const response = await fetchFn(url, { ...options, headers: this.headers });
+    return this.handleResponse<T>(response as Response);
   }
 
   // Collections API
@@ -805,7 +807,7 @@ server.registerTool(
   "list-collections",
   {
     title: "List Collections",
-    description: "Get all root or nested collections (Note: Collections API returns all collections without pagination)",
+    description: "Retrieve all bookmark collections (folders). Collections organize your bookmarks into categories. Set root=true for top-level collections or root=false for nested subcollections. Returns all collections without pagination.",
     inputSchema: listCollectionsSchema,
   },
   toolHandler<ListCollectionsParams>(async ({ root, fields }) => {
@@ -819,7 +821,7 @@ server.registerTool(
   "get-collection",
   {
     title: "Get Collection",
-    description: "Get details of a specific collection with field selection support",
+    description: "Retrieve details of a specific collection by ID. Returns collection metadata including title, description, bookmark count, view style, public/private status, and parent collection (if nested). Supports custom field selection.",
     inputSchema: getCollectionSchema,
   },
   toolHandler<GetCollectionParams>(async ({ id, fields }) => {
@@ -833,7 +835,7 @@ server.registerTool(
   "create-collection",
   {
     title: "Create Collection",
-    description: "Create a new collection",
+    description: "Create a new collection (folder) to organize bookmarks. Choose from view styles: 'list' (default compact), 'simple' (title only), 'grid' (cards with covers), or 'masonry' (Pinterest-style). Optionally nest under a parent collection, add description, set public sharing, and customize with cover images.",
     inputSchema: createCollectionSchema,
   },
   toolHandler<CreateCollectionParams>(async (params) => {
@@ -856,7 +858,7 @@ server.registerTool(
   "update-collection",
   {
     title: "Update Collection",
-    description: "Update an existing collection",
+    description: "Modify an existing collection's properties: rename, change description, switch view style, toggle public/private sharing, reorganize by changing parent, or expand/collapse nested subcollections in the UI.",
     inputSchema: updateCollectionSchema,
   },
   toolHandler<UpdateCollectionParams>(async ({ id, minimal, ...fields }) => {
@@ -878,7 +880,7 @@ server.registerTool(
   "delete-collection",
   {
     title: "Delete Collection",
-    description: "Remove a collection and all its descendants. Raindrops will be moved to Trash.",
+    description: "Permanently delete a collection and all nested subcollections. All bookmarks (raindrops) in the collection are moved to Trash (collection ID -99), not permanently deleted. The bookmarks can be restored or permanently deleted later.",
     inputSchema: deleteCollectionSchema,
   },
   toolHandler<DeleteCollectionParams>(async ({ id, minimal }) => {
@@ -895,7 +897,7 @@ server.registerTool(
   "list-raindrops",
   {
     title: "List Raindrops",
-    description: "Get raindrops from a collection with pagination and field selection support",
+    description: "List bookmarks (called 'raindrops' in Raindrop.io) from a collection with pagination. Special collection IDs: 0 (All bookmarks), -1 (Unsorted), -99 (Trash). Supports sorting, searching, nested collection traversal, and field presets (minimal/basic/standard/media/organization/metadata) for optimized responses.",
     inputSchema: listRaindropsSchema,
   },
   toolHandler<ListRaindropsParams>(async ({ collectionId, fields, ...queryParams }) => {
@@ -913,7 +915,7 @@ server.registerTool(
   "get-raindrop",
   {
     title: "Get Raindrop",
-    description: "Get a specific raindrop/bookmark by ID with field selection support",
+    description: "Retrieve a specific bookmark by ID. Returns complete details including URL, title, description, tags, notes, type (link/article/image/video/document/audio), cover image, creation date, and collection. Use field presets or custom arrays to optimize response size.",
     inputSchema: getRaindropSchema,
   },
   toolHandler<GetRaindropParams>(async ({ id, fields }) => {
@@ -927,7 +929,7 @@ server.registerTool(
   "create-raindrop",
   {
     title: "Create Raindrop",
-    description: "Create a new raindrop/bookmark",
+    description: "Save a new bookmark (raindrop). Provide a URL and optionally add title, description (excerpt), personal notes, tags, and mark as favorite (important). Set pleaseParse=true (default) to auto-extract metadata like title, description, and cover image from the URL. Bookmarks go to Unsorted (ID -1) unless a collection is specified.",
     inputSchema: createRaindropSchema,
   },
   toolHandler<CreateRaindropParams>(async (params) => {
@@ -952,7 +954,7 @@ server.registerTool(
   "update-raindrop",
   {
     title: "Update Raindrop",
-    description: "Update an existing raindrop/bookmark with field selection support",
+    description: "Modify an existing bookmark: change title, description, notes, tags, URL, move to different collection, toggle favorite status, or adjust sort order. Tags parameter replaces all existing tags (not additive). Returns updated bookmark with optional field filtering.",
     inputSchema: updateRaindropSchema,
   },
   toolHandler<UpdateRaindropParams>(async ({ id, collectionId, fields, minimal, ...updates }) => {
@@ -977,7 +979,7 @@ server.registerTool(
   "delete-raindrop",
   {
     title: "Delete Raindrop",
-    description: "Delete a raindrop/bookmark (moves to Trash, or permanently deletes if already in Trash)",
+    description: "Delete a bookmark. First deletion moves the raindrop to Trash (collection ID -99) where it can be restored. Deleting a bookmark already in Trash permanently removes it from your account.",
     inputSchema: deleteRaindropSchema,
   },
   toolHandler<DeleteRaindropParams>(async ({ id, minimal }) => {
@@ -990,7 +992,7 @@ server.registerTool(
   "search-raindrops",
   {
     title: "Search Raindrops",
-    description: "Search for raindrops using Raindrop.io's search syntax with pagination and field selection support",
+    description: "Search bookmarks using Raindrop.io's powerful search syntax. Supports operators: #tag (search by tag), site:example.com (filter by domain), type:article/image/video (filter by content type), important:true (favorites only), created:YYYY-MM-DD (date filter), and more. Full-text search works on title, description, notes, and cached page content. Combine with pagination and field selection.",
     inputSchema: searchRaindropsSchema,
   },
   toolHandler<SearchRaindropsParams>(async ({ collectionId, search, fields, ...otherParams }) => {
@@ -1012,7 +1014,7 @@ server.registerTool(
   "list-tags",
   {
     title: "List Tags",
-    description: "Get all tags or tags from a specific collection (Note: Tags API returns all tags without pagination)",
+    description: "Retrieve all tags used in your bookmarks, with usage counts. Optionally filter to tags from a specific collection. Tags help categorize and filter bookmarks across collections. Returns all tags without pagination.",
     inputSchema: listTagsSchema,
   },
   toolHandler<ListTagsParams>(async ({ collectionId, fields }) => {
@@ -1026,7 +1028,7 @@ server.registerTool(
   "merge-tags",
   {
     title: "Merge/Rename Tags",
-    description: "Merge multiple tags into a new tag name, or rename a single tag. All specified tags will be replaced with the new tag name across all bookmarks.",
+    description: "Consolidate multiple tags into one or rename a tag. Useful for fixing typos (e.g., merge ['JavaScirpt', 'javascript'] into 'JavaScript') or organizing tags (merge ['react', 'reactjs'] into 'React'). All specified tags are replaced with newTag across affected bookmarks. Optionally scope to a specific collection.",
     inputSchema: mergeTagsSchema,
   },
   toolHandler<MergeTagsParams>(async ({ tags, newTag, collectionId, minimal }) => {
@@ -1055,7 +1057,7 @@ server.registerTool(
   "delete-tags",
   {
     title: "Delete Tags",
-    description: "Delete one or more tags",
+    description: "Remove one or more tags from all bookmarks. The tags are deleted entirely; bookmarks that had these tags will no longer have them. Use collectionId to limit deletion to bookmarks in a specific collection, or omit to delete tags globally.",
     inputSchema: deleteTagsSchema,
   },
   toolHandler<DeleteTagsParams>(async ({ tags, collectionId, minimal }) => {
@@ -1072,7 +1074,7 @@ server.registerTool(
   "list-highlights",
   {
     title: "List Highlights",
-    description: "Get all highlights or highlights from a specific collection with pagination and field selection support",
+    description: "Retrieve text highlights and annotations from saved articles and web pages. Highlights are text selections you've marked while reading bookmarked content. Each highlight can include the selected text, optional notes, color coding, and timestamps. Supports pagination and field selection. Filter by collection or get all highlights.",
     inputSchema: listHighlightsSchema,
   },
   toolHandler<ListHighlightsParams>(async ({ collectionId, fields, ...queryParams }) => {
@@ -1094,7 +1096,7 @@ server.registerTool(
   "parse-url",
   {
     title: "Parse URL",
-    description: "Parse and extract metadata from a URL",
+    description: "Extract metadata from a URL before saving it as a bookmark. Returns the page title, description (excerpt), cover image, and content type (article/image/video/etc.). Useful for previewing what will be saved or getting metadata without creating a bookmark. This is the same parser used when pleaseParse=true in create-raindrop.",
     inputSchema: parseUrlSchema,
   },
   toolHandler<ParseUrlParams>(async ({ url }) => {
@@ -1107,7 +1109,7 @@ server.registerTool(
   "check-url-exists",
   {
     title: "Check URL Exists",
-    description: "Check if URLs are already saved in your Raindrop.io account",
+    description: "Check if one or more URLs are already bookmarked in your account before saving them. Prevents duplicate bookmarks. Returns raindrop IDs for URLs that exist and identifies duplicates. Useful for bulk import operations or validating links before adding them.",
     inputSchema: checkUrlExistsSchema,
   },
   toolHandler<CheckUrlExistsParams>(async ({ urls }) => {
@@ -1126,7 +1128,51 @@ async function main(): Promise<void> {
   console.error("Raindrop.io MCP server running on stdio");
 }
 
-main().catch((error: unknown) => {
-  console.error("Fatal error:", error);
-  process.exit(1);
-});
+// Only run if this is the main module (not imported for testing)
+if (import.meta.main) {
+  main().catch((error: unknown) => {
+    console.error("Fatal error:", error);
+    process.exit(1);
+  });
+}
+
+// ============================================================================
+// EXPORTS FOR TESTING
+// ============================================================================
+
+export {
+  cleanTitle,
+  cleanTitlesInData,
+  safeJsonParse,
+  resolveFieldList,
+  filterObjectFields,
+  filterFields,
+  filterApiResponse,
+  RaindropClient,
+  FIELD_PRESETS,
+  createSuccessResponse,
+  createJsonResponse,
+  createErrorResponse,
+  handleMinimalResponse,
+  handleMessageResponse,
+  toolHandler,
+};
+
+export type {
+  FieldPreset,
+  FieldFilter,
+  Collection,
+  Raindrop,
+  Tag,
+  Highlight,
+  CollectionsResponse,
+  CollectionResponse,
+  RaindropsResponse,
+  RaindropResponse,
+  TagsResponse,
+  HighlightsResponse,
+  ParseUrlResponse,
+  CheckUrlExistsResponse,
+  ApiResponse,
+  ToolResponse,
+};
