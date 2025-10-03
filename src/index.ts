@@ -4,6 +4,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import fetch, { Response } from "node-fetch";
 
+// ============================================================================
+// CONFIGURATION & CONSTANTS
+// ============================================================================
+
 const API_BASE_URL = "https://api.raindrop.io/rest/v1";
 const AUTH_TOKEN = process.env.RAINDROP_TOKEN;
 
@@ -13,13 +17,6 @@ if (!AUTH_TOKEN) {
   process.exit(1);
 }
 
-interface RaindropApiError {
-  result: false;
-  error?: string;
-  errorMessage?: string;
-}
-
-// Field presets for common use cases
 const FIELD_PRESETS = {
   minimal: ["_id", "link", "title"],
   basic: ["_id", "link", "title", "excerpt", "tags", "created", "domain"],
@@ -29,25 +26,36 @@ const FIELD_PRESETS = {
   metadata: ["_id", "created", "lastUpdate", "creatorRef", "user", "broken", "cache"],
 } as const;
 
-type FieldPreset = keyof typeof FIELD_PRESETS;
+// ============================================================================
+// TYPES
+// ============================================================================
 
-// Helper function to clean up titles by removing surrounding quotes
+type FieldPreset = keyof typeof FIELD_PRESETS;
+type FieldFilter = string[] | FieldPreset;
+
+interface RaindropApiError {
+  result: false;
+  error?: string;
+  errorMessage?: string;
+}
+
+// ============================================================================
+// TITLE CLEANING UTILITIES
+// ============================================================================
+
 function cleanTitle(title: string): string {
   if (typeof title !== "string") {return title;}
 
-  // Remove surrounding double quotes (e.g., ""Title"" -> "Title")
-  let cleaned = title.trim();
+  const cleaned = title.trim();
 
-  // Check if string starts and ends with the same quote character
   if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
       (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
-    cleaned = cleaned.slice(1, -1);
+    return cleaned.slice(1, -1);
   }
 
   return cleaned;
 }
 
-// Helper function to clean titles in objects recursively
 function cleanTitlesInData(data: any): any {
   if (!data || typeof data !== "object") {return data;}
 
@@ -69,110 +77,115 @@ function cleanTitlesInData(data: any): any {
   return cleaned;
 }
 
-// Helper function to safely parse JSON in preprocessing
-function safeJsonParse(val: any): any {
-  // If already an array, return as-is
-  if (Array.isArray(val)) {
-    return val;
-  }
-  // If undefined or null, return as-is
-  if (val === undefined || val === null) {
-    return val;
-  }
-  // If string, check if it's a preset value first before trying JSON parse
-  if (typeof val === "string") {
-    // Check if it's a field preset - if so, return as-is
-    if (val in FIELD_PRESETS) {
-      return val;
-    }
-    // Otherwise try to parse as JSON
-    try {
-      return JSON.parse(val);
-    } catch (_e) {
-      // Return undefined on parse error so Zod's optional() handles it
-      return undefined;
-    }
-  }
-  // For other types, return as-is
-  return val;
+// ============================================================================
+// FIELD FILTERING UTILITIES
+// ============================================================================
+
+function resolveFieldList(fields: FieldFilter): string[] {
+  return typeof fields === "string" && fields in FIELD_PRESETS
+    ? [...FIELD_PRESETS[fields as FieldPreset]]
+    : fields as string[];
 }
 
-// Helper function to filter object fields
-function filterFields(obj: any, fields?: string[] | FieldPreset): any {
-  if (!fields) {return obj;}
-
-  // If it's a preset name, get the fields from preset
-  const fieldList = typeof fields === "string" && fields in FIELD_PRESETS
-    ? FIELD_PRESETS[fields as FieldPreset]
-    : fields as string[];
-
-  if (!Array.isArray(fieldList)) {return obj;}
-
-  // Empty array means filter out all fields - return empty object
+function filterObjectFields(obj: any, fieldList: string[]): any {
   if (fieldList.length === 0) {return {};}
 
-  // Handle single object
-  if (!Array.isArray(obj)) {
-    const filtered: any = {};
-    for (const field of fieldList) {
-      if (field in obj) {
-        filtered[field] = obj[field];
-      }
+  const filtered: any = {};
+  for (const field of fieldList) {
+    if (field in obj) {
+      filtered[field] = obj[field];
     }
-    return filtered;
   }
-
-  // Handle array of objects
-  return obj.map((item: any) => {
-    const filtered: any = {};
-    for (const field of fieldList) {
-      if (field in item) {
-        filtered[field] = item[field];
-      }
-    }
-    return filtered;
-  });
+  return filtered;
 }
 
-// Helper function to apply field filtering to API responses
-function filterApiResponse(data: any, fields?: string[] | FieldPreset): any {
+function filterFields(data: any, fields?: FieldFilter): any {
   if (!fields) {return data;}
 
-  // Resolve preset to array if needed
-  const fieldList = typeof fields === "string" && fields in FIELD_PRESETS
-    ? FIELD_PRESETS[fields as FieldPreset]
-    : fields as string[];
+  const fieldList = resolveFieldList(fields);
 
-  // For empty array, return only top-level metadata (remove item/items)
-  if (Array.isArray(fieldList) && fieldList.length === 0) {
+  if (Array.isArray(data)) {
+    return data.map((item: any) => filterObjectFields(item, fieldList));
+  }
+
+  return filterObjectFields(data, fieldList);
+}
+
+function filterApiResponse(data: any, fields?: FieldFilter): any {
+  if (!fields) {return data;}
+
+  const fieldList = resolveFieldList(fields);
+
+  // For empty array, return only top-level metadata
+  if (fieldList.length === 0) {
     const { item: _item, items: _items, ...metadata } = data;
     return metadata;
   }
 
-  // For responses with items array (e.g., raindrops)
+  // Handle different response structures
   if (data.items && Array.isArray(data.items)) {
-    return {
-      ...data,
-      items: filterFields(data.items, fields)
-    };
+    return { ...data, items: filterFields(data.items, fields) };
   }
 
-  // For responses with item object (e.g., single raindrop)
   if (data.item && typeof data.item === "object") {
-    return {
-      ...data,
-      item: filterFields(data.item, fields)
-    };
+    return { ...data, item: filterFields(data.item, fields) };
   }
 
-  // For direct array responses (e.g., collections)
   if (Array.isArray(data)) {
     return filterFields(data, fields);
   }
 
-  // For other response types, return as-is
   return data;
 }
+
+// ============================================================================
+// SCHEMA PREPROCESSING & COMMON SCHEMAS
+// ============================================================================
+
+function safeJsonParse(val: any): any {
+  if (Array.isArray(val) || val === undefined || val === null) {
+    return val;
+  }
+
+  if (typeof val === "string") {
+    if (val in FIELD_PRESETS) {
+      return val;
+    }
+    try {
+      return JSON.parse(val);
+    } catch {
+      return undefined;
+    }
+  }
+
+  return val;
+}
+
+// Reusable schema components
+const fieldArraySchema = z.preprocess(safeJsonParse, z.array(z.string())).optional();
+
+const fieldPresetOrArraySchema = z.preprocess(
+  safeJsonParse,
+  z.union([
+    z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
+    z.array(z.string())
+  ])
+).optional();
+
+const tagsArraySchema = z.preprocess(safeJsonParse, z.array(z.string())).optional();
+
+const minimalSchema = z.boolean().default(false);
+
+const paginationSchemas = {
+  page: z.number().min(0).default(0),
+  perpage: z.number().min(1).max(50).default(25),
+};
+
+const sortOrderSchema = z.enum(["-created", "created", "score", "-sort", "title", "-title", "domain", "-domain"]).optional();
+
+// ============================================================================
+// RAINDROP API CLIENT
+// ============================================================================
 
 class RaindropClient {
   private headers: Record<string, string>;
@@ -188,7 +201,7 @@ class RaindropClient {
     let data: any;
     try {
       data = await response.json() as any;
-    } catch (_e) {
+    } catch {
       throw new Error(`Failed to parse JSON response: ${response.status} ${response.statusText}`);
     }
 
@@ -199,176 +212,168 @@ class RaindropClient {
       );
     }
 
-    // Clean up titles in the response data
     return cleanTitlesInData(data);
   }
 
-  // Collections API
-  async getCollections(root: boolean = true): Promise<any> {
-    const endpoint = root ? "/collections" : "/collections/childrens";
-    const url = `${API_BASE_URL}${endpoint}`;
-    const response = await fetch(url, {
-      headers: this.headers,
-    });
+  private buildUrl(path: string, params?: Record<string, any>): string {
+    const url = `${API_BASE_URL}${path}`;
+    if (!params || Object.keys(params).length === 0) {return url;}
+
+    const queryString = new URLSearchParams(params as Record<string, string>).toString();
+    return `${url}?${queryString}`;
+  }
+
+  private async request(url: string, options: { method?: string; body?: string } = {}): Promise<any> {
+    const response = await fetch(url, { ...options, headers: this.headers });
     return this.handleResponse(response);
+  }
+
+  // Collections API
+  async getCollections(root = true): Promise<any> {
+    const endpoint = root ? "/collections" : "/collections/childrens";
+    return this.request(this.buildUrl(endpoint));
   }
 
   async getCollection(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/collection/${id}`, {
-      headers: this.headers,
-    });
-    return this.handleResponse(response);
+    return this.request(this.buildUrl(`/collection/${id}`));
   }
 
   async createCollection(data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/collection`, {
+    return this.request(this.buildUrl("/collection"), {
       method: "POST",
-      headers: this.headers,
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     });
-    return this.handleResponse(response);
   }
 
   async updateCollection(id: number, data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/collection/${id}`, {
+    return this.request(this.buildUrl(`/collection/${id}`), {
       method: "PUT",
-      headers: this.headers,
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     });
-    return this.handleResponse(response);
   }
 
   async deleteCollection(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/collection/${id}`, {
-      method: "DELETE",
-      headers: this.headers,
-    });
-    return this.handleResponse(response);
+    return this.request(this.buildUrl(`/collection/${id}`), { method: "DELETE" });
   }
 
   // Raindrops API
   async getRaindrops(collectionId: number, params?: any): Promise<any> {
-    const queryParams = new URLSearchParams(params || {});
-    const url = `${API_BASE_URL}/raindrops/${collectionId}${queryParams.toString() ? `?${queryParams}` : ""}`;
-    const response = await fetch(url, {
-      headers: this.headers,
-    });
-    return this.handleResponse(response);
+    return this.request(this.buildUrl(`/raindrops/${collectionId}`, params));
   }
 
   async getRaindrop(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/raindrop/${id}`, {
-      headers: this.headers,
-    });
-    return this.handleResponse(response);
+    return this.request(this.buildUrl(`/raindrop/${id}`));
   }
 
   async createRaindrop(data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/raindrop`, {
+    return this.request(this.buildUrl("/raindrop"), {
       method: "POST",
-      headers: this.headers,
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     });
-    return this.handleResponse(response);
   }
 
   async updateRaindrop(id: number, data: any): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/raindrop/${id}`, {
+    return this.request(this.buildUrl(`/raindrop/${id}`), {
       method: "PUT",
-      headers: this.headers,
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     });
-    return this.handleResponse(response);
   }
 
   async deleteRaindrop(id: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/raindrop/${id}`, {
-      method: "DELETE",
-      headers: this.headers,
-    });
-    return this.handleResponse(response);
+    return this.request(this.buildUrl(`/raindrop/${id}`), { method: "DELETE" });
   }
 
-  // Search API
   async searchRaindrops(collectionId: number, search: string, params?: any): Promise<any> {
-    const queryParams = new URLSearchParams({ search, ...params });
-    const url = `${API_BASE_URL}/raindrops/${collectionId}?${queryParams}`;
-    const response = await fetch(url, {
-      headers: this.headers,
-    });
-    return this.handleResponse(response);
+    return this.request(this.buildUrl(`/raindrops/${collectionId}`, { search, ...params }));
   }
 
   // Tags API
   async getTags(collectionId?: number): Promise<any> {
-    const url = collectionId !== undefined
-      ? `${API_BASE_URL}/tags/${collectionId}`
-      : `${API_BASE_URL}/tags`;
-    const response = await fetch(url, {
-      headers: this.headers,
-    });
-    return this.handleResponse(response);
+    const path = collectionId !== undefined ? `/tags/${collectionId}` : "/tags";
+    return this.request(this.buildUrl(path));
   }
 
   async mergeTags(tags: string[], newTag: string, collectionId?: number): Promise<any> {
-    const url = collectionId !== undefined
-      ? `${API_BASE_URL}/tags/${collectionId}`
-      : `${API_BASE_URL}/tags`;
-    const response = await fetch(url, {
+    const path = collectionId !== undefined ? `/tags/${collectionId}` : "/tags";
+    return this.request(this.buildUrl(path), {
       method: "PUT",
-      headers: this.headers,
-      body: JSON.stringify({
-        tags,
-        replace: newTag,
-      }),
+      body: JSON.stringify({ tags, replace: newTag })
     });
-    return this.handleResponse(response);
   }
 
   async deleteTags(tags: string[], collectionId?: number): Promise<any> {
-    const url = collectionId !== undefined
-      ? `${API_BASE_URL}/tags/${collectionId}`
-      : `${API_BASE_URL}/tags`;
-    const response = await fetch(url, {
+    const path = collectionId !== undefined ? `/tags/${collectionId}` : "/tags";
+    return this.request(this.buildUrl(path), {
       method: "DELETE",
-      headers: this.headers,
-      body: JSON.stringify({ tags }),
+      body: JSON.stringify({ tags })
     });
-    return this.handleResponse(response);
   }
 
   // Highlights API
   async getHighlights(collectionId?: number, params?: any): Promise<any> {
-    const queryParams = new URLSearchParams(params || {});
-    const url = collectionId !== undefined
-      ? `${API_BASE_URL}/highlights/${collectionId}${queryParams.toString() ? `?${queryParams}` : ""}`
-      : `${API_BASE_URL}/highlights${queryParams.toString() ? `?${queryParams}` : ""}`;
-    const response = await fetch(url, {
-      headers: this.headers,
-    });
-    return this.handleResponse(response);
+    const path = collectionId !== undefined ? `/highlights/${collectionId}` : "/highlights";
+    return this.request(this.buildUrl(path, params));
   }
 
   // Import/Export API
   async parseUrl(url: string): Promise<any> {
-    const queryParams = new URLSearchParams({ url });
-    const response = await fetch(`${API_BASE_URL}/import/url/parse?${queryParams}`, {
-      headers: this.headers,
-    });
-    return this.handleResponse(response);
+    return this.request(this.buildUrl("/import/url/parse", { url }));
   }
 
   async checkUrlExists(urls: string[]): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/import/url/exists`, {
+    return this.request(this.buildUrl("/import/url/exists"), {
       method: "POST",
-      headers: this.headers,
-      body: JSON.stringify({ urls }),
+      body: JSON.stringify({ urls })
     });
-    return this.handleResponse(response);
   }
 }
 
-// Initialize the MCP server
+// ============================================================================
+// RESPONSE HELPERS
+// ============================================================================
+
+function createSuccessResponse(text: string) {
+  return { content: [{ type: "text", text }] };
+}
+
+function createJsonResponse(data: any) {
+  return createSuccessResponse(JSON.stringify(data, null, 2));
+}
+
+function createErrorResponse(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    content: [{ type: "text", text: `Error: ${message}` }],
+    isError: true
+  };
+}
+
+function handleMinimalResponse(data: any, minimal?: boolean) {
+  return minimal ? createSuccessResponse("ok") : createJsonResponse(data);
+}
+
+function handleMessageResponse(message: string, minimal?: boolean) {
+  return createSuccessResponse(minimal ? "ok" : message);
+}
+
+// ============================================================================
+// TOOL REGISTRATION WRAPPER
+// ============================================================================
+
+function toolHandler<T>(handler: (params: T) => Promise<any>) {
+  return async (params: T) => {
+    try {
+      return await handler(params);
+    } catch (error) {
+      return createErrorResponse(error);
+    }
+  };
+}
+
+// ============================================================================
+// SERVER INITIALIZATION
+// ============================================================================
+
 const server = new McpServer({
   name: "raindrop-mcp",
   version: "1.0.0",
@@ -376,7 +381,10 @@ const server = new McpServer({
 
 const client = new RaindropClient(AUTH_TOKEN);
 
-// Register tools for Collections
+// ============================================================================
+// COLLECTION TOOLS
+// ============================================================================
+
 server.registerTool(
   "list-collections",
   {
@@ -384,36 +392,14 @@ server.registerTool(
     description: "Get all root or nested collections (Note: Collections API returns all collections without pagination)",
     inputSchema: {
       root: z.boolean().default(true).describe("Get root collections (true) or nested collections (false)"),
-      fields: z.preprocess(
-        safeJsonParse,
-        z.array(z.string())
-      ).optional().describe("Array of field names to include in the response (e.g., ['_id', 'title', 'count', 'public', 'parent'])")
+      fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'title', 'count', 'public', 'parent'])")
     },
   },
-  async ({ root, fields }) => {
-    try {
-      const result = await client.getCollections(root);
-      const filtered = filterApiResponse(result, fields as string[]);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(filtered, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  toolHandler(async ({ root, fields }: any) => {
+    const result = await client.getCollections(root);
+    const filtered = filterApiResponse(result, fields as FieldFilter);
+    return createJsonResponse(filtered);
+  })
 );
 
 server.registerTool(
@@ -423,36 +409,14 @@ server.registerTool(
     description: "Get details of a specific collection with field selection support",
     inputSchema: {
       id: z.number().describe("Collection ID"),
-      fields: z.preprocess(
-        safeJsonParse,
-        z.array(z.string())
-      ).optional().describe("Array of field names to include in the response (e.g., ['_id', 'title', 'count', 'public', 'parent'])")
+      fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'title', 'count', 'public', 'parent'])")
     },
   },
-  async ({ id, fields }) => {
-    try {
-      const result = await client.getCollection(id);
-      const filtered = filterApiResponse(result, fields as string[]);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(filtered, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  toolHandler(async ({ id, fields }: any) => {
+    const result = await client.getCollection(id);
+    const filtered = filterApiResponse(result, fields as FieldFilter);
+    return createJsonResponse(filtered);
+  })
 );
 
 server.registerTool(
@@ -467,54 +431,23 @@ server.registerTool(
       view: z.enum(["list", "simple", "grid", "masonry"]).default("list").describe("View style"),
       public: z.boolean().default(false).describe("Make collection public"),
       cover: z.array(z.string()).optional().describe("Collection cover URL"),
-      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
+      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
     },
   },
-  async (params) => {
-    try {
-      const data: any = {
-        title: params.title,
-        view: params.view,
-        public: params.public,
-      };
+  toolHandler(async (params: any) => {
+    const data: any = {
+      title: params.title,
+      view: params.view,
+      public: params.public,
+    };
 
-      if (params.description) {data.description = params.description;}
-      if (params.parentId) {data.parent = { $id: params.parentId };}
-      if (params.cover) {data.cover = params.cover;}
+    if (params.description) {data.description = params.description;}
+    if (params.parentId) {data.parent = { $id: params.parentId };}
+    if (params.cover) {data.cover = params.cover;}
 
-      const result = await client.createCollection(data);
-
-      if (params.minimal) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "ok",
-            },
-          ],
-        };
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+    const result = await client.createCollection(data);
+    return handleMinimalResponse(result, params.minimal);
+  })
 );
 
 server.registerTool(
@@ -530,54 +463,22 @@ server.registerTool(
       view: z.enum(["list", "simple", "grid", "masonry"]).optional().describe("View style"),
       public: z.boolean().optional().describe("Make collection public/private"),
       expanded: z.boolean().optional().describe("Expand/collapse sub-collections"),
-      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
+      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
     },
   },
-  async (params) => {
-    try {
-      const { id, minimal, ...data } = params;
-      const updateData: any = {};
+  toolHandler(async ({ id, minimal, ...fields }: any) => {
+    const data: any = {};
 
-      if (data.title !== undefined) {updateData.title = data.title;}
-      if (data.description !== undefined) {updateData.description = data.description;}
-      if (data.parentId !== undefined) {updateData.parent = { $id: data.parentId };}
-      if (data.view !== undefined) {updateData.view = data.view;}
-      if (data.public !== undefined) {updateData.public = data.public;}
-      if (data.expanded !== undefined) {updateData.expanded = data.expanded;}
+    if (fields.title !== undefined) {data.title = fields.title;}
+    if (fields.description !== undefined) {data.description = fields.description;}
+    if (fields.parentId !== undefined) {data.parent = { $id: fields.parentId };}
+    if (fields.view !== undefined) {data.view = fields.view;}
+    if (fields.public !== undefined) {data.public = fields.public;}
+    if (fields.expanded !== undefined) {data.expanded = fields.expanded;}
 
-      const result = await client.updateCollection(id, updateData);
-
-      if (minimal) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "ok",
-            },
-          ],
-        };
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+    const result = await client.updateCollection(id, data);
+    return handleMinimalResponse(result, minimal);
+  })
 );
 
 server.registerTool(
@@ -587,35 +488,19 @@ server.registerTool(
     description: "Remove a collection and all its descendants. Raindrops will be moved to Trash.",
     inputSchema: {
       id: z.number().describe("Collection ID to delete"),
-      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
+      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
     },
   },
-  async ({ id, minimal }) => {
-    try {
-      const _result = await client.deleteCollection(id);
-      return {
-        content: [
-          {
-            type: "text",
-            text: minimal ? "ok" : "Collection deleted successfully",
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  toolHandler(async ({ id, minimal }: any) => {
+    await client.deleteCollection(id);
+    return handleMessageResponse("Collection deleted successfully", minimal);
+  })
 );
 
-// Register tools for Raindrops
+// ============================================================================
+// RAINDROP TOOLS
+// ============================================================================
+
 server.registerTool(
   "list-raindrops",
   {
@@ -623,45 +508,19 @@ server.registerTool(
     description: "Get raindrops from a collection with pagination and field selection support",
     inputSchema: {
       collectionId: z.number().describe("Collection ID (0 for all, -1 for Unsorted, -99 for Trash)"),
-      page: z.number().min(0).default(0).describe("Page number (starts from 0)"),
-      perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50)"),
-      sort: z.enum(["-created", "created", "score", "-sort", "title", "-title", "domain", "-domain"]).optional().describe("Sort order"),
+      page: paginationSchemas.page.describe("Page number (starts from 0)"),
+      perpage: paginationSchemas.perpage.describe("Items per page (max 50)"),
+      sort: sortOrderSchema.describe("Sort order"),
       search: z.string().optional().describe("Search query"),
       nested: z.boolean().optional().describe("Include bookmarks from nested collections"),
-      fields: z.preprocess(
-        safeJsonParse,
-        z.union([
-          z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
-          z.array(z.string())
-        ])
-      ).optional().describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
+      fields: fieldPresetOrArraySchema.describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
     },
   },
-  async (params) => {
-    try {
-      const { collectionId, fields, ...queryParams } = params;
-      const result = await client.getRaindrops(collectionId, queryParams);
-      const filtered = filterApiResponse(result, fields as string[] | FieldPreset);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(filtered, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  toolHandler(async ({ collectionId, fields, ...queryParams }: any) => {
+    const result = await client.getRaindrops(collectionId, queryParams);
+    const filtered = filterApiResponse(result, fields as FieldFilter);
+    return createJsonResponse(filtered);
+  })
 );
 
 server.registerTool(
@@ -671,39 +530,14 @@ server.registerTool(
     description: "Get a specific raindrop/bookmark by ID with field selection support",
     inputSchema: {
       id: z.number().describe("Raindrop ID"),
-      fields: z.preprocess(
-        safeJsonParse,
-        z.union([
-          z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
-          z.array(z.string())
-        ])
-      ).optional().describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
+      fields: fieldPresetOrArraySchema.describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
     },
   },
-  async ({ id, fields }) => {
-    try {
-      const result = await client.getRaindrop(id);
-      const filtered = filterApiResponse(result, fields as string[] | FieldPreset);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(filtered, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  toolHandler(async ({ id, fields }: any) => {
+    const result = await client.getRaindrop(id);
+    const filtered = filterApiResponse(result, fields as FieldFilter);
+    return createJsonResponse(filtered);
+  })
 );
 
 server.registerTool(
@@ -716,65 +550,27 @@ server.registerTool(
       title: z.string().optional().describe("Title (will be auto-parsed if not provided)"),
       excerpt: z.string().optional().describe("Description/excerpt"),
       note: z.string().optional().describe("Personal note"),
-      tags: z.preprocess(
-        safeJsonParse,
-        z.array(z.string())
-      ).optional().describe("Tags for the bookmark"),
+      tags: tagsArraySchema.describe("Tags for the bookmark"),
       collectionId: z.number().optional().describe("Collection ID (default: -1 for Unsorted)"),
       important: z.boolean().optional().describe("Mark as favorite"),
       pleaseParse: z.boolean().default(true).describe("Auto-parse metadata from URL"),
-      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
+      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
     },
   },
-  async (params) => {
-    try {
-      const data: any = {
-        link: params.link,
-      };
+  toolHandler(async (params: any) => {
+    const data: any = { link: params.link };
 
-      if (params.title) {data.title = params.title;}
-      if (params.excerpt) {data.excerpt = params.excerpt;}
-      if (params.note) {data.note = params.note;}
-      if (params.tags) {data.tags = params.tags;}
-      if (params.collectionId !== undefined) {
-        data.collection = { $id: params.collectionId };
-      }
-      if (params.important !== undefined) {data.important = params.important;}
-      if (params.pleaseParse) {data.pleaseParse = {};}
+    if (params.title) {data.title = params.title;}
+    if (params.excerpt) {data.excerpt = params.excerpt;}
+    if (params.note) {data.note = params.note;}
+    if (params.tags) {data.tags = params.tags;}
+    if (params.collectionId !== undefined) {data.collection = { $id: params.collectionId };}
+    if (params.important !== undefined) {data.important = params.important;}
+    if (params.pleaseParse) {data.pleaseParse = {};}
 
-      const result = await client.createRaindrop(data);
-
-      if (params.minimal) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "ok",
-            },
-          ],
-        };
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+    const result = await client.createRaindrop(data);
+    return handleMinimalResponse(result, params.minimal);
+  })
 );
 
 server.registerTool(
@@ -787,67 +583,31 @@ server.registerTool(
       title: z.string().optional().describe("New title"),
       excerpt: z.string().optional().describe("New description"),
       note: z.string().optional().describe("New note"),
-      tags: z.preprocess(
-        safeJsonParse,
-        z.array(z.string())
-      ).optional().describe("New tags (replaces existing)"),
+      tags: tagsArraySchema.describe("New tags (replaces existing)"),
       link: z.string().optional().describe("New URL"),
       collectionId: z.number().optional().describe("Move to different collection"),
       important: z.boolean().optional().describe("Mark/unmark as favorite"),
       order: z.number().optional().describe("Sort order position"),
-      fields: z.preprocess(
-        safeJsonParse,
-        z.union([
-          z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
-          z.array(z.string())
-        ])
-      ).optional().describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata'), array of field names, or empty array [] to return only result status"),
-      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
+      fields: fieldPresetOrArraySchema.describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata'), array of field names, or empty array [] to return only result status"),
+      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
     },
   },
-  async (params) => {
-    try {
-      const { id, collectionId, fields, minimal, ...data } = params;
-      const updateData: any = { ...data };
+  toolHandler(async ({ id, collectionId, fields, minimal, ...updates }: any) => {
+    const data: any = { ...updates };
 
-      if (collectionId !== undefined) {
-        updateData.collection = { $id: collectionId };
-      }
-
-      const result = await client.updateRaindrop(id, updateData);
-
-      if (minimal) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "ok",
-            },
-          ],
-        };
-      }
-
-      const filtered = filterApiResponse(result, fields as string[] | FieldPreset);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(filtered, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+    if (collectionId !== undefined) {
+      data.collection = { $id: collectionId };
     }
-  }
+
+    const result = await client.updateRaindrop(id, data);
+
+    if (minimal) {
+      return createSuccessResponse("ok");
+    }
+
+    const filtered = filterApiResponse(result, fields as FieldFilter);
+    return createJsonResponse(filtered);
+  })
 );
 
 server.registerTool(
@@ -857,35 +617,15 @@ server.registerTool(
     description: "Delete a raindrop/bookmark (moves to Trash, or permanently deletes if already in Trash)",
     inputSchema: {
       id: z.number().describe("Raindrop ID to delete"),
-      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
+      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
     },
   },
-  async ({ id, minimal }) => {
-    try {
-      const _result = await client.deleteRaindrop(id);
-      return {
-        content: [
-          {
-            type: "text",
-            text: minimal ? "ok" : "Raindrop deleted successfully",
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  toolHandler(async ({ id, minimal }: any) => {
+    await client.deleteRaindrop(id);
+    return handleMessageResponse("Raindrop deleted successfully", minimal);
+  })
 );
 
-// Register search tool
 server.registerTool(
   "search-raindrops",
   {
@@ -894,46 +634,23 @@ server.registerTool(
     inputSchema: {
       search: z.string().describe("Search query (supports operators like #tag, site:example.com, etc.)"),
       collectionId: z.number().default(0).describe("Collection to search in (0 for all)"),
-      page: z.number().min(0).default(0).describe("Page number (starts from 0)"),
-      perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50)"),
-      sort: z.enum(["-created", "created", "score", "-sort", "title", "-title", "domain", "-domain"]).optional().describe("Sort order"),
-      fields: z.preprocess(
-        safeJsonParse,
-        z.union([
-          z.enum(["minimal", "basic", "standard", "media", "organization", "metadata"]),
-          z.array(z.string())
-        ])
-      ).optional().describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
+      page: paginationSchemas.page.describe("Page number (starts from 0)"),
+      perpage: paginationSchemas.perpage.describe("Items per page (max 50)"),
+      sort: sortOrderSchema.describe("Sort order"),
+      fields: fieldPresetOrArraySchema.describe("Field selection: Use preset ('minimal', 'basic', 'standard', 'media', 'organization', 'metadata') or array of field names")
     },
   },
-  async (params) => {
-    try {
-      const { collectionId, search, fields, ...otherParams } = params;
-      const result = await client.searchRaindrops(collectionId, search, otherParams);
-      const filtered = filterApiResponse(result, fields as string[] | FieldPreset);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(filtered, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  toolHandler(async ({ collectionId, search, fields, ...otherParams }: any) => {
+    const result = await client.searchRaindrops(collectionId, search, otherParams);
+    const filtered = filterApiResponse(result, fields as FieldFilter);
+    return createJsonResponse(filtered);
+  })
 );
 
-// Register tag tools
+// ============================================================================
+// TAG TOOLS
+// ============================================================================
+
 server.registerTool(
   "list-tags",
   {
@@ -941,36 +658,14 @@ server.registerTool(
     description: "Get all tags or tags from a specific collection (Note: Tags API returns all tags without pagination)",
     inputSchema: {
       collectionId: z.number().optional().describe("Collection ID (omit for all tags)"),
-      fields: z.preprocess(
-        safeJsonParse,
-        z.array(z.string())
-      ).optional().describe("Array of field names to include in the response (e.g., ['_id', 'count'])")
+      fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'count'])")
     },
   },
-  async ({ collectionId, fields }) => {
-    try {
-      const result = await client.getTags(collectionId);
-      const filtered = filterApiResponse(result, fields as string[]);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(filtered, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  toolHandler(async ({ collectionId, fields }: any) => {
+    const result = await client.getTags(collectionId);
+    const filtered = filterApiResponse(result, fields as FieldFilter);
+    return createJsonResponse(filtered);
+  })
 );
 
 server.registerTool(
@@ -985,56 +680,29 @@ server.registerTool(
       ).describe("List of tag names to merge/rename (can be a single tag or multiple tags)"),
       newTag: z.string().min(1, "New tag name is required and cannot be empty").describe("New tag name to replace all specified tags"),
       collectionId: z.number().optional().describe("Limit operation to specific collection (omit to apply across all collections)"),
-      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space, instead of detailed success message"),
+      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space, instead of detailed success message"),
     },
   },
-  async ({ tags, newTag, collectionId, minimal }) => {
-    try {
-      // Validate required parameters
-      if (!tags || tags.length === 0) {
-        throw new Error("Parameter 'tags' is required and must be a non-empty array of tag names");
-      }
-      if (!newTag || newTag.trim() === "") {
-        throw new Error("Parameter 'newTag' is required and cannot be empty");
-      }
-
-      const _result = await client.mergeTags(tags, newTag, collectionId);
-
-      // Return minimal response if requested
-      if (minimal) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "ok",
-            },
-          ],
-        };
-      }
-
-      // Default detailed response
-      return {
-        content: [
-          {
-            type: "text",
-            text: tags.length === 1
-              ? "Tag renamed successfully"
-              : `${tags.length} tags merged into '${newTag}' successfully`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+  toolHandler(async ({ tags, newTag, collectionId, minimal }: any) => {
+    if (!tags || tags.length === 0) {
+      throw new Error("Parameter 'tags' is required and must be a non-empty array of tag names");
     }
-  }
+    if (!newTag || newTag.trim() === "") {
+      throw new Error("Parameter 'newTag' is required and cannot be empty");
+    }
+
+    await client.mergeTags(tags, newTag, collectionId);
+
+    if (minimal) {
+      return createSuccessResponse("ok");
+    }
+
+    const message = tags.length === 1
+      ? "Tag renamed successfully"
+      : `${tags.length} tags merged into '${newTag}' successfully`;
+
+    return createSuccessResponse(message);
+  })
 );
 
 server.registerTool(
@@ -1045,35 +713,19 @@ server.registerTool(
     inputSchema: {
       tags: z.array(z.string()).describe("Tags to delete"),
       collectionId: z.number().optional().describe("Limit to specific collection"),
-      minimal: z.boolean().default(false).describe("Return minimal response (just 'ok') to save space"),
+      minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
     },
   },
-  async ({ tags, collectionId, minimal }) => {
-    try {
-      const _result = await client.deleteTags(tags, collectionId);
-      return {
-        content: [
-          {
-            type: "text",
-            text: minimal ? "ok" : "Tags deleted successfully",
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  toolHandler(async ({ tags, collectionId, minimal }: any) => {
+    await client.deleteTags(tags, collectionId);
+    return handleMessageResponse("Tags deleted successfully", minimal);
+  })
 );
 
-// Register highlight tools
+// ============================================================================
+// HIGHLIGHT TOOLS
+// ============================================================================
+
 server.registerTool(
   "list-highlights",
   {
@@ -1081,42 +733,22 @@ server.registerTool(
     description: "Get all highlights or highlights from a specific collection with pagination and field selection support",
     inputSchema: {
       collectionId: z.number().optional().describe("Collection ID (omit for all highlights)"),
-      page: z.number().min(0).default(0).describe("Page number (starts from 0)"),
-      perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50, default 25)"),
-      fields: z.preprocess(
-        safeJsonParse,
-        z.array(z.string())
-      ).optional().describe("Array of field names to include in the response (e.g., ['_id', 'text', 'color', 'note', 'created'])")
+      page: paginationSchemas.page.describe("Page number (starts from 0)"),
+      perpage: paginationSchemas.perpage.describe("Items per page (max 50, default 25)"),
+      fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'text', 'color', 'note', 'created'])")
     },
   },
-  async (params) => {
-    try {
-      const { collectionId, fields, ...queryParams } = params;
-      const result = await client.getHighlights(collectionId, queryParams);
-      const filtered = filterApiResponse(result, fields as string[]);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(filtered, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  toolHandler(async ({ collectionId, fields, ...queryParams }: any) => {
+    const result = await client.getHighlights(collectionId, queryParams);
+    const filtered = filterApiResponse(result, fields as FieldFilter);
+    return createJsonResponse(filtered);
+  })
 );
 
-// Register URL parsing tools
+// ============================================================================
+// URL PARSING TOOLS
+// ============================================================================
+
 server.registerTool(
   "parse-url",
   {
@@ -1126,29 +758,10 @@ server.registerTool(
       url: z.string().describe("URL to parse"),
     },
   },
-  async ({ url }) => {
-    try {
-      const result = await client.parseUrl(url);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  toolHandler(async ({ url }: any) => {
+    const result = await client.parseUrl(url);
+    return createJsonResponse(result);
+  })
 );
 
 server.registerTool(
@@ -1160,32 +773,16 @@ server.registerTool(
       urls: z.array(z.string()).describe("URLs to check"),
     },
   },
-  async ({ urls }) => {
-    try {
-      const result = await client.checkUrlExists(urls);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
+  toolHandler(async ({ urls }: any) => {
+    const result = await client.checkUrlExists(urls);
+    return createJsonResponse(result);
+  })
 );
 
-// Main function to start the server
+// ============================================================================
+// SERVER STARTUP
+// ============================================================================
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
