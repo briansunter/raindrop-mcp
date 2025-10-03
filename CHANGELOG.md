@@ -1,3 +1,12 @@
+## [1.0.2](https://github.com/briansunter/raindrop-mcp/compare/v1.0.1...v1.0.2) (2025-10-03)
+
+
+### Bug Fixes
+
+* add tests ([32afd1a](https://github.com/briansunter/raindrop-mcp/commit/32afd1aec6c1339d5788e26bcb33f43a78ff3f5c))
+* improve types ([e3256d5](https://github.com/briansunter/raindrop-mcp/commit/e3256d50a9817d9b35287ef26a20f38fa8f22553))
+* refactor ([e5a5610](https://github.com/briansunter/raindrop-mcp/commit/e5a56105776bfc96ba3b1531033566ec4c5151b8))
+
 ## [1.0.1](https://github.com/briansunter/raindrop-mcp/compare/v1.0.0...v1.0.1) (2025-10-02)
 
 
