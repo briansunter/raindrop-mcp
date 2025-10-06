@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/briansunter/raindrop-mcp/compare/v1.0.2...v1.0.3) (2025-10-06)
+
+
+### Bug Fixes
+
+* ensure dist/index.js is executable and update to prefer bun ([d42ee21](https://github.com/briansunter/raindrop-mcp/commit/d42ee2151aab856bf8af04871873ccffb99891bf))
+
 ## [1.0.2](https://github.com/briansunter/raindrop-mcp/compare/v1.0.1...v1.0.2) (2025-10-03)
 
 
