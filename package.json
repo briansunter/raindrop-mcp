@@ -43,7 +43,7 @@
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
     "prepare": "husky",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
