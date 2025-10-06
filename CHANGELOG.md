@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/briansunter/raindrop-mcp/compare/v1.1.1...v1.1.2) (2025-10-06)
+
+
+### Bug Fixes
+
+* remove broken import.meta.main check that prevented server startup ([0fedcbe](https://github.com/briansunter/raindrop-mcp/commit/0fedcbe6701aea92520cfcd2049ac99e5c4d945d))
+
 ## [1.1.1](https://github.com/briansunter/raindrop-mcp/compare/v1.1.0...v1.1.1) (2025-10-06)
 
 
