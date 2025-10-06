@@ -4,19 +4,35 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import fetch, { type Response } from "node-fetch";
 
+// Debug logging helper - writes to stderr
+const debugLog = (...args: unknown[]) => {
+  console.error("[raindrop-mcp]", ...args);
+};
+
 // ============================================================================
 // CONFIGURATION & CONSTANTS
 // ============================================================================
 
+debugLog("Starting Raindrop MCP server...");
+debugLog("Node version:", process.version);
+debugLog("Current directory:", process.cwd());
+
 const API_BASE_URL = "https://api.raindrop.io/rest/v1";
 const AUTH_TOKEN = process.env.RAINDROP_TOKEN;
+
+debugLog("Checking for RAINDROP_TOKEN...");
+debugLog("RAINDROP_TOKEN present:", !!AUTH_TOKEN);
+debugLog("RAINDROP_TOKEN length:", AUTH_TOKEN?.length || 0);
 
 if (!AUTH_TOKEN) {
   console.error("Error: RAINDROP_TOKEN environment variable is not set");
   console.error("Please set RAINDROP_TOKEN with your Raindrop.io API token");
   console.error("Available env vars:", Object.keys(process.env).filter(k => k.includes("RAINDROP") || k.includes("TOKEN")).join(", "));
+  console.error("All env var keys:", Object.keys(process.env).sort().join(", "));
   process.exit(1);
 }
+
+debugLog("RAINDROP_TOKEN found, continuing initialization...");
 
 const FIELD_PRESETS = {
   minimal: ["_id", "link", "title"],
