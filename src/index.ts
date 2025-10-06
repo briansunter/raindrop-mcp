@@ -14,6 +14,7 @@ const AUTH_TOKEN = process.env.RAINDROP_TOKEN;
 if (!AUTH_TOKEN) {
   console.error("Error: RAINDROP_TOKEN environment variable is not set");
   console.error("Please set RAINDROP_TOKEN with your Raindrop.io API token");
+  console.error("Available env vars:", Object.keys(process.env).filter(k => k.includes("RAINDROP") || k.includes("TOKEN")).join(", "));
   process.exit(1);
 }
 
