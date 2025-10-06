@@ -1,3 +1,10 @@
+## [1.0.5](https://github.com/briansunter/raindrop-mcp/compare/v1.0.4...v1.0.5) (2025-10-06)
+
+
+### Bug Fixes
+
+* add debug logging for missing RAINDROP_TOKEN ([a84e413](https://github.com/briansunter/raindrop-mcp/commit/a84e41352b33cd28d40597a9b86bf94cff471946))
+
 ## [1.0.4](https://github.com/briansunter/raindrop-mcp/compare/v1.0.3...v1.0.4) (2025-10-06)
 
 
