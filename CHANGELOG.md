@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/briansunter/raindrop-mcp/compare/v1.1.0...v1.1.1) (2025-10-06)
+
+
+### Bug Fixes
+
+* add logging around import.meta.main check for debugging ([1e308e7](https://github.com/briansunter/raindrop-mcp/commit/1e308e71f9eb8e5bd1fdeca7359089293bfb6253))
+
 # [1.1.0](https://github.com/briansunter/raindrop-mcp/compare/v1.0.5...v1.1.0) (2025-10-06)
 
 
