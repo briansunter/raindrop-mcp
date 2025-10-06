@@ -421,6 +421,22 @@ const deleteRaindropSchema = {
   minimal: minimalSchema.describe("Return minimal response (just 'ok') to save space"),
 };
 
+const createRaindropsBulkSchema = {
+  raindrops: z.array(z.object({
+    link: z.string().describe("URL of the bookmark"),
+    title: z.string().optional().describe("Title (will be auto-parsed if not provided)"),
+    excerpt: z.string().optional().describe("Description/excerpt"),
+    note: z.string().optional().describe("Personal note"),
+    tags: tagsArraySchema.describe("Tags for the bookmark"),
+    collectionId: z.number().optional().describe("Collection ID (default: -1 for Unsorted)"),
+    important: z.boolean().optional().describe("Mark as favorite"),
+    pleaseParse: z.boolean().default(true).describe("Auto-parse metadata from URL"),
+  })).min(1, "At least one raindrop must be provided").max(50, "Maximum 50 raindrops can be created at once").describe("Array of raindrops to create"),
+  delayMs: z.number().min(100).max(5000).default(500).describe("Delay between requests in milliseconds to avoid rate limiting"),
+  continueOnError: z.boolean().default(false).describe("Continue processing remaining raindrops if one fails"),
+  minimal: minimalSchema.describe("Return minimal response (just summary) to save space"),
+};
+
 const searchRaindropsSchema = {
   search: z.string().describe("Search query (supports operators like #tag, site:example.com, etc.)"),
   collectionId: z.number().default(0).describe("Collection to search in (0 for all)"),
@@ -432,6 +448,8 @@ const searchRaindropsSchema = {
 
 const listTagsSchema = {
   collectionId: z.number().optional().describe("Collection ID (omit for all tags)"),
+  page: paginationSchemas.page.describe("Page number (starts from 0)"),
+  perpage: paginationSchemas.perpage.describe("Items per page (max 50, default 25)"),
   fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'count'])")
 };
 
@@ -549,6 +567,22 @@ interface DeleteRaindropParams {
   minimal: boolean;
 }
 
+interface CreateRaindropsBulkParams {
+  raindrops: Array<{
+    link: string;
+    title?: string;
+    excerpt?: string;
+    note?: string;
+    tags?: string[];
+    collectionId?: number;
+    important?: boolean;
+    pleaseParse?: boolean;
+  }>;
+  delayMs: number;
+  continueOnError: boolean;
+  minimal: boolean;
+}
+
 interface SearchRaindropsParams {
   search: string;
   collectionId: number;
@@ -560,6 +594,8 @@ interface SearchRaindropsParams {
 
 interface ListTagsParams {
   collectionId?: number;
+  page: number;
+  perpage: number;
   fields?: string[];
 }
 
@@ -716,9 +752,9 @@ class RaindropClient {
   }
 
   // Tags API
-  async getTags(collectionId?: number): Promise<TagsResponse> {
+  async getTags(collectionId?: number, params?: Record<string, JsonPrimitive>): Promise<TagsResponse> {
     const path = collectionId !== undefined ? `/tags/${collectionId}` : "/tags";
-    return this.request<TagsResponse>(this.buildUrl(path));
+    return this.request<TagsResponse>(this.buildUrl(path, params));
   }
 
   async mergeTags(
@@ -789,6 +825,11 @@ function handleMinimalResponse<T extends JsonValue>(data: T, minimal?: boolean):
 
 function handleMessageResponse(message: string, minimal?: boolean): ToolResponse {
   return createSuccessResponse(minimal ? "ok" : message);
+}
+
+// Helper function to delay execution
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // ============================================================================
@@ -968,6 +1009,85 @@ server.registerTool(
 );
 
 server.registerTool(
+  "create-raindrops-bulk",
+  {
+    title: "Create Raindrops (Bulk)",
+    description: "Create multiple bookmarks (raindrops) in a batch operation. Processes bookmarks sequentially with configurable delays to avoid rate limiting. Supports continue-on-error mode to process remaining bookmarks if one fails. Returns detailed results including success/failure counts, errors, and created bookmark details. Maximum 50 bookmarks per request.",
+    inputSchema: createRaindropsBulkSchema,
+  },
+  toolHandler<CreateRaindropsBulkParams>(async ({ raindrops, delayMs, continueOnError, minimal }) => {
+    const results = {
+      total: raindrops.length,
+      successful: 0,
+      failed: 0,
+      created: [] as Raindrop[],
+      errors: [] as Array<{ index: number; link: string; error: string }>
+    };
+
+    for (let i = 0; i < raindrops.length; i++) {
+      const raindrop = raindrops[i];
+
+      try {
+        // Add delay between requests (except for the first one)
+        if (i > 0 && delayMs > 0) {
+          await delay(delayMs);
+        }
+
+        const data: Partial<Raindrop> & { link: string; pleaseParse?: Record<string, never> } = {
+          link: raindrop.link
+        };
+
+        if (raindrop.title) {data.title = raindrop.title;}
+        if (raindrop.excerpt) {data.excerpt = raindrop.excerpt;}
+        if (raindrop.note) {data.note = raindrop.note;}
+        if (raindrop.tags) {data.tags = raindrop.tags;}
+        if (raindrop.collectionId !== undefined) {data.collection = { $id: raindrop.collectionId };}
+        if (raindrop.important !== undefined) {data.important = raindrop.important;}
+        if (raindrop.pleaseParse) {data.pleaseParse = {};}
+
+        const result = await client.createRaindrop(data);
+        results.successful++;
+        results.created.push(result.item);
+
+      } catch (error) {
+        results.failed++;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        results.errors.push({
+          index: i,
+          link: raindrop.link,
+          error: errorMessage
+        });
+
+        if (!continueOnError) {
+          // Stop processing on first error if continueOnError is false
+          break;
+        }
+      }
+    }
+
+    if (minimal) {
+      return createJsonResponse({
+        success: results.failed === 0,
+        created: results.successful,
+        failed: results.failed,
+        total: results.total
+      } as JsonValue);
+    }
+
+    return createJsonResponse({
+      success: results.failed === 0,
+      summary: {
+        total: results.total,
+        successful: results.successful,
+        failed: results.failed
+      },
+      created: results.created,
+      errors: results.errors.length > 0 ? results.errors : undefined
+    } as JsonValue);
+  })
+);
+
+server.registerTool(
   "update-raindrop",
   {
     title: "Update Raindrop",
@@ -1031,11 +1151,15 @@ server.registerTool(
   "list-tags",
   {
     title: "List Tags",
-    description: "Retrieve all tags used in your bookmarks, with usage counts. Optionally filter to tags from a specific collection. Tags help categorize and filter bookmarks across collections. Returns all tags without pagination.",
+    description: "Retrieve all tags used in your bookmarks, with usage counts. Optionally filter to tags from a specific collection. Tags help categorize and filter bookmarks across collections. Supports pagination and field selection.",
     inputSchema: listTagsSchema,
   },
-  toolHandler<ListTagsParams>(async ({ collectionId, fields }) => {
-    const result = await client.getTags(collectionId);
+  toolHandler<ListTagsParams>(async ({ collectionId, page, perpage, fields }) => {
+    const params = Object.fromEntries(
+      Object.entries({ page, perpage }).filter(([_, v]) => v !== undefined)
+    ) as Record<string, JsonPrimitive>;
+
+    const result = await client.getTags(collectionId, params);
     const filtered = filterApiResponse(result, fields);
     return createJsonResponse(filtered as JsonValue);
   })

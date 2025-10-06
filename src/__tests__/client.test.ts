@@ -571,6 +571,70 @@ describe("RaindropClient", () => {
 
       expect(capturedUrl).toContain("/tags/123");
     });
+
+    test("includes pagination parameters in request", async () => {
+      const mockResponse: TagsResponse = {
+        result: true,
+        items: [
+          { _id: "javascript", count: 10 }
+        ]
+      };
+
+      let capturedUrl = "";
+      globalThis.fetch = mock(async (url: string) => {
+        capturedUrl = url;
+        return {
+          ok: true,
+          json: async () => mockResponse
+        };
+      }) as unknown as typeof fetch;
+
+      await client.getTags(undefined, { page: 1, perpage: 10 });
+
+      expect(capturedUrl).toContain("page=1");
+      expect(capturedUrl).toContain("perpage=10");
+    });
+
+    test("includes pagination with collection ID", async () => {
+      const mockResponse: TagsResponse = {
+        result: true,
+        items: []
+      };
+
+      let capturedUrl = "";
+      globalThis.fetch = mock(async (url: string) => {
+        capturedUrl = url;
+        return {
+          ok: true,
+          json: async () => mockResponse
+        };
+      }) as unknown as typeof fetch;
+
+      await client.getTags(456, { page: 2, perpage: 20 });
+
+      expect(capturedUrl).toContain("/tags/456");
+      expect(capturedUrl).toContain("page=2");
+      expect(capturedUrl).toContain("perpage=20");
+    });
+
+    test("handles pagination for large tag sets", async () => {
+      const mockResponse: TagsResponse = {
+        result: true,
+        items: Array.from({ length: 25 }, (_, i) => ({
+          _id: `tag${i}`,
+          count: i + 1
+        }))
+      };
+
+      globalThis.fetch = mock(async () => ({
+        ok: true,
+        json: async () => mockResponse
+      })) as unknown as typeof fetch;
+
+      const result = await client.getTags(undefined, { page: 0, perpage: 25 });
+
+      expect(result.items).toHaveLength(25);
+    });
   });
 
   describe("mergeTags", () => {
