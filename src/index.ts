@@ -1140,17 +1140,25 @@ server.registerTool(
 // ============================================================================
 
 async function main(): Promise<void> {
+  debugLog("main() called, creating transport...");
   const transport = new StdioServerTransport();
+  debugLog("Transport created, connecting server...");
   await server.connect(transport);
+  debugLog("Server connected successfully!");
   console.error("Raindrop.io MCP server running on stdio");
 }
 
 // Only run if this is the main module (not imported for testing)
+debugLog("Checking import.meta.main:", import.meta.main);
+debugLog("import.meta.url:", import.meta.url);
 if (import.meta.main) {
+  debugLog("Starting main()...");
   main().catch((error: unknown) => {
-    console.error("Fatal error:", error);
+    console.error("Fatal error in main():", error);
     process.exit(1);
   });
+} else {
+  debugLog("Not main module, skipping server startup");
 }
 
 // ============================================================================
