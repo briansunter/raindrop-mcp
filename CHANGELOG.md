@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/briansunter/raindrop-mcp/compare/v1.0.5...v1.1.0) (2025-10-06)
+
+
+### Features
+
+* add comprehensive debug logging for troubleshooting ([d1ae633](https://github.com/briansunter/raindrop-mcp/commit/d1ae633b5059df40273b7b4edbb1bb99f609680b))
+
 ## [1.0.5](https://github.com/briansunter/raindrop-mcp/compare/v1.0.4...v1.0.5) (2025-10-06)
 
 
