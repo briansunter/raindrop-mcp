@@ -1,3 +1,10 @@
+## [1.0.4](https://github.com/briansunter/raindrop-mcp/compare/v1.0.3...v1.0.4) (2025-10-06)
+
+
+### Bug Fixes
+
+* use npm instead of bun in prepublishOnly for CI compatibility ([8ec1b8a](https://github.com/briansunter/raindrop-mcp/commit/8ec1b8a94e984dcf776477c3f3d2faf8d7d79faa))
+
 ## [1.0.3](https://github.com/briansunter/raindrop-mcp/compare/v1.0.2...v1.0.3) (2025-10-06)
 
 
