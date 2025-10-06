@@ -22,8 +22,6 @@ A Model Context Protocol server for [Raindrop.io](https://raindrop.io) - manage 
 }
 ```
 
-> **Note for Claude Code users**: Due to a [known bug](https://github.com/anthropics/claude-code/issues/1254) with environment variables, you may need to use the local development version instead. See [Development Setup](#development) below.
-
 3. Restart Claude Desktop
 
 That's it! You can now ask Claude to manage your Raindrop bookmarks.
@@ -275,35 +273,6 @@ Valid tokens return your user data. Invalid tokens return a 401 error.
 3. Verify the JSON is valid (no trailing commas, proper quotes)
 4. Check Claude's MCP logs for errors
 
-### Environment Variables Not Working (Claude Code)
-
-There's a [known bug](https://github.com/anthropics/claude-code/issues/1254) where Claude Code doesn't pass environment variables to MCP servers properly.
-
-**Workaround**: Use the local development version:
-
-```json
-{
-  "mcpServers": {
-    "raindrop": {
-      "command": "node",
-      "args": ["/absolute/path/to/raindrop-mcp/dist/index.js"],
-      "env": {
-        "RAINDROP_TOKEN": "your-token-here"
-      }
-    }
-  }
-}
-```
-
-Clone and build the repository first:
-```bash
-git clone https://github.com/briansunter/raindrop-mcp.git
-cd raindrop-mcp
-bun install
-bun run build
-```
-
-Then use the full path to `dist/index.js` in your config.
 
 ## API Documentation
 
