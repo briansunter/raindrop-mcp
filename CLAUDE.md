@@ -4,14 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
+**Use bun for all commands** - This project uses bun as the preferred runtime/package manager.
+
 ### Build & Type Checking
-- `npm run build` - Build the project
-- `npm run typecheck` - Type check without emitting files
-- **Do not run** `npm run dev` or `npm run start:dev` - these start long-running servers
+- `bun run build` - Build the project
+- `bun run typecheck` - Type check without emitting files
+- **Do not run** `bun run dev` or `bun run start:dev` - these start long-running servers
 
 ### Linting
-- `npm run lint` - Check code style
-- `npm run lint:fix` - Auto-fix linting issues
+- `bun run lint` - Check code style
+- `bun run lint:fix` - Auto-fix linting issues
 
 ### Testing
 - Test manually with your own Raindrop.io account
