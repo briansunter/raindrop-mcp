@@ -94,7 +94,7 @@ https://example.com/article
 - `delete-collection` - Remove a collection
 
 ### Tags
-- `list-tags` - Get all tags (no pagination - returns all tags)
+- `list-tags` - Get all tags with client-side pagination support
 - `merge-tags` - Merge or rename tags
 - `delete-tags` - Remove tags
 
@@ -138,6 +138,8 @@ Reduce response size by selecting only the fields you need:
 For large result sets:
 - `page` - Page number (starts at 0)
 - `perpage` - Items per page (max 50, default 25)
+
+**Note:** The `list-tags` endpoint implements client-side pagination (fetches all tags from API, then paginates in MCP) since the Raindrop.io API doesn't support server-side pagination for tags. The response includes `total`, `count`, and `hasMore` fields for pagination metadata.
 
 ### Minimal Responses
 
