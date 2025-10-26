@@ -438,8 +438,8 @@ const searchRaindropsSchema = {
 
 const listTagsSchema = {
   collectionId: z.number().optional().describe("Collection ID (omit for all tags)"),
-  page: paginationSchemas.page.describe("Page number (starts from 0) - paginated client-side"),
-  perpage: paginationSchemas.perpage.describe("Items per page (max 50, default 25) - paginated client-side"),
+  page: z.number().min(0).default(0).describe("Page number (starts from 0) - paginated client-side"),
+  perpage: z.number().min(1).max(50).default(25).describe("Items per page (max 50, default 25) - paginated client-side"),
   fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'count'])")
 };
 
@@ -584,8 +584,8 @@ interface SearchRaindropsParams {
 
 interface ListTagsParams {
   collectionId?: number;
-  page: number;
-  perpage: number;
+  page?: number;
+  perpage?: number;
   fields?: string[];
 }
 
@@ -1144,16 +1144,19 @@ server.registerTool(
     description: "Retrieve all tags used in your bookmarks, with usage counts. Optionally filter to tags from a specific collection. Tags help categorize and filter bookmarks across collections. Supports client-side pagination with page and perpage parameters.",
     inputSchema: listTagsSchema,
   },
-  toolHandler<ListTagsParams>(async ({ collectionId, page, perpage, fields }) => {
+  toolHandler<ListTagsParams>(async ({ collectionId, page = 0, perpage = 25, fields }) => {
+    debugLog(`list-tags called with: collectionId=${collectionId}, page=${page}, perpage=${perpage}, fields=${fields}`);
     // Fetch all tags from API (API doesn't support pagination)
     const result = await client.getTags(collectionId);
 
     // Apply client-side pagination
     const allItems = result.items || [];
     const totalCount = allItems.length;
+    debugLog(`Total tags: ${totalCount}`);
     const startIndex = page * perpage;
     const endIndex = startIndex + perpage;
     const paginatedItems = allItems.slice(startIndex, endIndex);
+    debugLog(`Paginated: startIndex=${startIndex}, endIndex=${endIndex}, paginatedItems.length=${paginatedItems.length}`);
 
     // Build paginated response
     const paginatedResult = {
@@ -1166,7 +1169,9 @@ server.registerTool(
       hasMore: endIndex < totalCount
     };
 
+    debugLog(`Returning paginated result with ${paginatedResult.items.length} items`);
     const filtered = filterApiResponse(paginatedResult, fields);
+    debugLog(`After filtering: ${JSON.stringify(filtered).length} characters`);
     return createJsonResponse(filtered as JsonValue);
   })
 );
