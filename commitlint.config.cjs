@@ -18,6 +18,7 @@ module.exports = {
         'build'     // build system changes
       ]
     ],
-    'body-max-line-length': [0, 'always'] // Disable body line length limit
+    'body-max-line-length': [0, 'always'], // Disable body line length limit
+    'footer-max-line-length': [0, 'always'] // Disable footer line length limit (for semantic-release)
   }
 };
