@@ -1,3 +1,10 @@
+## [1.1.5](https://github.com/briansunter/raindrop-mcp/compare/v1.1.4...v1.1.5) (2025-10-26)
+
+
+### Bug Fixes
+
+* make list-tags pagination parameters optional with proper defaults ([#5](https://github.com/briansunter/raindrop-mcp/issues/5)) ([138a7e2](https://github.com/briansunter/raindrop-mcp/commit/138a7e2cafa2142aae8836a459879ac5e53f2aee))
+
 ## [1.1.4](https://github.com/briansunter/raindrop-mcp/compare/v1.1.3...v1.1.4) (2025-10-26)
 
 
