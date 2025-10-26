@@ -1269,12 +1269,14 @@ async function main(): Promise<void> {
   console.error("Raindrop.io MCP server running on stdio");
 }
 
-// Start the server
-debugLog("Starting main()...");
-main().catch((error: unknown) => {
-  console.error("Fatal error in main():", error);
-  process.exit(1);
-});
+// Start the server only when running directly (not during imports/tests)
+if (import.meta.main) {
+  debugLog("Starting main()...");
+  main().catch((error: unknown) => {
+    console.error("Fatal error in main():", error);
+    process.exit(1);
+  });
+}
 
 // ============================================================================
 // EXPORTS FOR TESTING
