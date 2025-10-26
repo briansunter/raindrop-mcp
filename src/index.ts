@@ -18,21 +18,11 @@ debugLog("Node version:", process.version);
 debugLog("Current directory:", process.cwd());
 
 const API_BASE_URL = "https://api.raindrop.io/rest/v1";
-const AUTH_TOKEN = process.env.RAINDROP_TOKEN;
+const AUTH_TOKEN = process.env.RAINDROP_TOKEN || "test-token-for-testing";
 
 debugLog("Checking for RAINDROP_TOKEN...");
-debugLog("RAINDROP_TOKEN present:", !!AUTH_TOKEN);
-debugLog("RAINDROP_TOKEN length:", AUTH_TOKEN?.length || 0);
-
-if (!AUTH_TOKEN) {
-  console.error("Error: RAINDROP_TOKEN environment variable is not set");
-  console.error("Please set RAINDROP_TOKEN with your Raindrop.io API token");
-  console.error("Available env vars:", Object.keys(process.env).filter(k => k.includes("RAINDROP") || k.includes("TOKEN")).join(", "));
-  console.error("All env var keys:", Object.keys(process.env).sort().join(", "));
-  process.exit(1);
-}
-
-debugLog("RAINDROP_TOKEN found, continuing initialization...");
+debugLog("RAINDROP_TOKEN present:", !!process.env.RAINDROP_TOKEN);
+debugLog("RAINDROP_TOKEN length:", process.env.RAINDROP_TOKEN?.length || 0);
 
 const FIELD_PRESETS = {
   minimal: ["_id", "link", "title"],
@@ -1264,6 +1254,13 @@ server.registerTool(
 // ============================================================================
 
 async function main(): Promise<void> {
+  // Verify token is set when actually running the server
+  if (!process.env.RAINDROP_TOKEN) {
+    console.error("Error: RAINDROP_TOKEN environment variable is not set");
+    console.error("Please set RAINDROP_TOKEN with your Raindrop.io API token");
+    process.exit(1);
+  }
+
   debugLog("main() called, creating transport...");
   const transport = new StdioServerTransport();
   debugLog("Transport created, connecting server...");
