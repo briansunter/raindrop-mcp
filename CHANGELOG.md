@@ -1,3 +1,11 @@
+## [1.1.4](https://github.com/briansunter/raindrop-mcp/compare/v1.1.3...v1.1.4) (2025-10-26)
+
+
+### Bug Fixes
+
+* disable footer-max-line-length in commitlint for semantic-release ([9e69a6d](https://github.com/briansunter/raindrop-mcp/commit/9e69a6d584a3cfd98cae95e32bfe8f9dd3741669))
+* remove non-functional pagination from list-tags endpoint ([#4](https://github.com/briansunter/raindrop-mcp/issues/4)) ([7293687](https://github.com/briansunter/raindrop-mcp/commit/7293687935b88046e68a4902b0b7bee68b292a09))
+
 ## [1.1.3](https://github.com/briansunter/raindrop-mcp/compare/v1.1.2...v1.1.3) (2025-10-26)
 
 
