@@ -1270,11 +1270,11 @@ async function main(): Promise<void> {
 }
 
 // Start the server only when running directly (not during imports/tests)
-// Check if we're running as a direct invocation (not imported)
-const isTestMode = process.argv.some(arg => arg.includes("test") || arg.includes("bun test"));
-const isDirect = import.meta.main || process.argv[1]?.includes("raindrop-mcp");
+// Skip if: running tests, stdin is not a TTY, or not running as main module
+const isTestRunning = process.argv.some(arg => arg.includes("test"));
+const hasValidStdin = process.stdin.isTTY === false || process.argv[1]?.includes("raindrop-mcp");
 
-if (!isTestMode && isDirect) {
+if (!isTestRunning && (import.meta.main || hasValidStdin)) {
   debugLog("Starting main()...");
   main().catch((error: unknown) => {
     console.error("Fatal error in main():", error);
