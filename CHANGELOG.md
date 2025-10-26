@@ -1,3 +1,14 @@
+## [1.1.3](https://github.com/briansunter/raindrop-mcp/compare/v1.1.2...v1.1.3) (2025-10-26)
+
+
+### Bug Fixes
+
+* disable code coverage threshold to allow tests to pass ([ef3acb4](https://github.com/briansunter/raindrop-mcp/commit/ef3acb4cc31e113ce33604c354868830540e4195))
+* make RAINDROP_TOKEN optional for testing ([3e578fb](https://github.com/briansunter/raindrop-mcp/commit/3e578fb8a5e10960b362ed8f17775da5af4e5dd6))
+* prevent server startup during test imports ([835e724](https://github.com/briansunter/raindrop-mcp/commit/835e7247c09cafaedd6fed9a492f2a5b5a30cd2c))
+* refine server startup detection for non-TTY environments ([2eba805](https://github.com/briansunter/raindrop-mcp/commit/2eba80580d7b1c5e2c38742c4fe3fbfa8c728c4b))
+* skip server startup detection in test environments ([7675f17](https://github.com/briansunter/raindrop-mcp/commit/7675f177320a8f09aa1478b5fe96fe6f00b6abdd))
+
 ## [1.1.2](https://github.com/briansunter/raindrop-mcp/compare/v1.1.1...v1.1.2) (2025-10-06)
 
 
