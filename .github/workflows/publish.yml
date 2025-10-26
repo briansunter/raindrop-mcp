@@ -18,27 +18,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
 
       - name: Install dependencies
-        run: npm install
+        run: bun install
 
       - name: Run type checking
-        run: npm run typecheck
+        run: bun run typecheck
 
       - name: Run linting
-        run: npm run lint
+        run: bun run lint
 
       - name: Build package
-        run: npm run build
+        run: bun run build
 
       - name: Update version if provided
         if: github.event.inputs.version
         run: |
-          npm version ${{ github.event.inputs.version }} --no-git-tag-version
+          bun x semver -i patch package.json
           echo "Updated package.json to version ${{ github.event.inputs.version }}"
 
       - name: Configure npm authentication
@@ -46,7 +44,7 @@ jobs:
           echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
 
       - name: Publish to npm
-        run: npm publish --access public
+        run: bun publish --token ${{ secrets.NPM_TOKEN }} --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
