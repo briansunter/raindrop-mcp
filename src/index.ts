@@ -438,8 +438,6 @@ const searchRaindropsSchema = {
 
 const listTagsSchema = {
   collectionId: z.number().optional().describe("Collection ID (omit for all tags)"),
-  page: paginationSchemas.page.describe("Page number (starts from 0)"),
-  perpage: paginationSchemas.perpage.describe("Items per page (max 50, default 25)"),
   fields: fieldArraySchema.describe("Array of field names to include in the response (e.g., ['_id', 'count'])")
 };
 
@@ -584,8 +582,6 @@ interface SearchRaindropsParams {
 
 interface ListTagsParams {
   collectionId?: number;
-  page: number;
-  perpage: number;
   fields?: string[];
 }
 
@@ -1141,15 +1137,11 @@ server.registerTool(
   "list-tags",
   {
     title: "List Tags",
-    description: "Retrieve all tags used in your bookmarks, with usage counts. Optionally filter to tags from a specific collection. Tags help categorize and filter bookmarks across collections. Supports pagination and field selection.",
+    description: "Retrieve all tags used in your bookmarks, with usage counts. Optionally filter to tags from a specific collection. Tags help categorize and filter bookmarks across collections. Returns all tags without pagination.",
     inputSchema: listTagsSchema,
   },
-  toolHandler<ListTagsParams>(async ({ collectionId, page, perpage, fields }) => {
-    const params = Object.fromEntries(
-      Object.entries({ page, perpage }).filter(([_, v]) => v !== undefined)
-    ) as Record<string, JsonPrimitive>;
-
-    const result = await client.getTags(collectionId, params);
+  toolHandler<ListTagsParams>(async ({ collectionId, fields }) => {
+    const result = await client.getTags(collectionId);
     const filtered = filterApiResponse(result, fields);
     return createJsonResponse(filtered as JsonValue);
   })

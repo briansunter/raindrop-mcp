@@ -94,7 +94,7 @@ https://example.com/article
 - `delete-collection` - Remove a collection
 
 ### Tags
-- `list-tags` - Get all tags
+- `list-tags` - Get all tags (no pagination - returns all tags)
 - `merge-tags` - Merge or rename tags
 - `delete-tags` - Remove tags
 
