@@ -1290,24 +1290,9 @@ async function main(): Promise<void> {
   console.error("Raindrop.io MCP server running on stdio");
 }
 
-// Start the server only when running directly (not during imports/tests)
-// Conditions:
-// - NOT running tests (test runner in argv)
-// - IS running as main module (import.meta.main)
-// - Stdin is NOT a TTY (pipe/socket, not terminal) OR explicitly running as raindrop-mcp
-const isTestRunning = process.argv.some(arg => 
-  arg.includes("/test") || 
-  arg.includes("test/") || 
-  arg.endsWith(".test.ts") || 
-  arg.endsWith(".test.js") ||
-  arg.includes("vitest") ||
-  arg.includes("jest") ||
-  arg.includes("mocha")
-);
-const isMainModule = import.meta.main;
-const isStdioMode = process.stdin.isTTY === false;
-
-if (!isTestRunning && (isMainModule || isStdioMode)) {
+// Start the server only when running directly (not during tests)
+// Set RAINDROP_MCP_SKIP_AUTO_START=1 in tests to prevent auto-start
+if (!process.env.RAINDROP_MCP_SKIP_AUTO_START) {
   debugLog("Starting main()...");
   main().catch((error: unknown) => {
     console.error("Fatal error in main():", error);
