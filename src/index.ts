@@ -1295,7 +1295,15 @@ async function main(): Promise<void> {
 // - NOT running tests (test runner in argv)
 // - IS running as main module (import.meta.main)
 // - Stdin is NOT a TTY (pipe/socket, not terminal) OR explicitly running as raindrop-mcp
-const isTestRunning = process.argv.some(arg => arg.includes("test"));
+const isTestRunning = process.argv.some(arg => 
+  arg.includes("/test") || 
+  arg.includes("test/") || 
+  arg.endsWith(".test.ts") || 
+  arg.endsWith(".test.js") ||
+  arg.includes("vitest") ||
+  arg.includes("jest") ||
+  arg.includes("mocha")
+);
 const isMainModule = import.meta.main;
 const isStdioMode = process.stdin.isTTY === false;
 
