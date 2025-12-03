@@ -1,3 +1,10 @@
+## [1.1.6](https://github.com/briansunter/raindrop-mcp/compare/v1.1.5...v1.1.6) (2025-12-03)
+
+
+### Bug Fixes
+
+* test detection matching 'latest' in path ([4b93fa0](https://github.com/briansunter/raindrop-mcp/commit/4b93fa097befa8b5cc6c83337be2aa7378aaed18))
+
 ## [1.1.5](https://github.com/briansunter/raindrop-mcp/compare/v1.1.4...v1.1.5) (2025-10-26)
 
 
