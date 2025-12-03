@@ -1,3 +1,10 @@
+## [1.1.7](https://github.com/briansunter/raindrop-mcp/compare/v1.1.6...v1.1.7) (2025-12-03)
+
+
+### Bug Fixes
+
+* use env var for test detection instead of path matching ([9aeeb7c](https://github.com/briansunter/raindrop-mcp/commit/9aeeb7ce26ee7f090c53e53656e05d5d93cf611e))
+
 ## [1.1.6](https://github.com/briansunter/raindrop-mcp/compare/v1.1.5...v1.1.6) (2025-12-03)
 
 
