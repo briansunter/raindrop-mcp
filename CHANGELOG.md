@@ -1,3 +1,10 @@
+## [1.1.8](https://github.com/briansunter/raindrop-mcp/compare/v1.1.7...v1.1.8) (2025-12-31)
+
+
+### Features
+
+* add Claude Code plugin structure ([6d760e7](https://github.com/briansunter/raindrop-mcp/commit/6d760e78588ddf4dfc1c62aa7d4a4cc2a11bcb3b))
+
 ## [1.1.7](https://github.com/briansunter/raindrop-mcp/compare/v1.1.6...v1.1.7) (2025-12-03)
 
 
