@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "raindrop": {
+      "command": "bunx",
+      "args": ["@briansunter/raindrop-mcp"],
+      "type": "stdio",
+      "env": {
+        "RAINDROP_TOKEN": "${RAINDROP_TOKEN}"
+      },
+      "description": "Raindrop.io MCP server for bookmark management - save, organize, search bookmarks with collections, tags, and highlights"
+    }
+  }
+}

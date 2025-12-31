@@ -6,13 +6,15 @@
   "types": "dist/index.d.ts",
   "type": "module",
   "license": "MIT",
-  "author": "MCP Raindrop Contributors",
+  "author": "Brian Sunter",
   "bin": {
     "raindrop-mcp": "dist/index.js",
     "briansunter-raindrop-mcp": "dist/index.js"
   },
   "files": [
     "dist",
+    ".claude-plugin",
+    ".mcp.json",
     "README.md",
     "LICENSE"
   ],

@@ -1,0 +1,18 @@
+{
+  "name": "raindrop-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Raindrop.io bookmark management. Save, organize, search, and manage bookmarks with collections, tags, and highlights through Claude Code.",
+  "author": {
+    "name": "Brian Sunter"
+  },
+  "license": "MIT",
+  "keywords": [
+    "raindrop",
+    "bookmarks",
+    "mcp",
+    "collections",
+    "tags",
+    "highlights",
+    "knowledge-management"
+  ]
+}
