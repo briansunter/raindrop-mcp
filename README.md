@@ -1,4 +1,6 @@
-![Raindrop MCP Server: manage your Raindrop.io bookmarks, collections, tags, and highlights through any MCP client](docs/banner.png)
+<p align="center">
+  <img src="docs/banner.png" alt="Raindrop MCP Server: manage your Raindrop.io bookmarks, collections, tags, and highlights through any MCP client" width="320">
+</p>
 
 # Raindrop MCP Server
 
