@@ -1,6 +1,10 @@
+![Raindrop MCP Server: manage your Raindrop.io bookmarks, collections, tags, and highlights through any MCP client](docs/banner.png)
+
 # Raindrop MCP Server
 
 A Model Context Protocol server for [Raindrop.io](https://raindrop.io) - manage your bookmarks, collections, tags, and highlights through Claude and other MCP clients.
+
+![How Raindrop MCP works: an MCP client like Claude calls the Raindrop MCP Server over stdio, which exposes bookmark, collection, tag, and highlight tools backed by the Raindrop.io API](docs/explainer.png)
 
 ## Quick Start
 
