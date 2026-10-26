@@ -833,6 +833,37 @@ describe("RaindropClient", () => {
 
       expect(capturedBody).toContain('"urls"');
     });
+
+    test("returns empty result when no URLs exist", async () => {
+      // Raindrop answers HTTP 200 with result:false when nothing matches
+      const mockResponse: CheckUrlExistsResponse = {
+        result: false,
+        ids: [],
+        duplicates: []
+      };
+
+      globalThis.fetch = mock(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => mockResponse
+      })) as unknown as typeof fetch;
+
+      const result = await client.checkUrlExists(["https://example.com/not-saved"]);
+
+      expect(result.result).toBe(false);
+      expect(result.ids).toHaveLength(0);
+      expect(result.duplicates).toHaveLength(0);
+    });
+
+    test("still throws on HTTP errors", async () => {
+      globalThis.fetch = mock(async () => ({
+        ok: false,
+        status: 401,
+        json: async () => ({ result: false, errorMessage: "Unauthorized" })
+      })) as unknown as typeof fetch;
+
+      expect(client.checkUrlExists(["https://example.com"])).rejects.toThrow("Unauthorized");
+    });
   });
 
   describe("error handling", () => {

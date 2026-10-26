@@ -631,7 +631,10 @@ class RaindropClient {
     };
   }
 
-  private async handleResponse<T extends ApiResponse>(response: Response): Promise<T> {
+  private async handleResponse<T extends ApiResponse>(
+    response: Response,
+    allowFalseResult = false
+  ): Promise<T> {
     let data: unknown;
     try {
       data = await response.json() as unknown;
@@ -641,7 +644,7 @@ class RaindropClient {
 
     const parsedData = data as ApiResponse | RaindropApiError;
 
-    if (!response.ok || parsedData.result === false) {
+    if (!response.ok || (parsedData.result === false && !allowFalseResult)) {
       const error = parsedData as RaindropApiError;
       throw new Error(
         error.errorMessage || error.error || `API request failed: ${response.status}`
@@ -665,12 +668,13 @@ class RaindropClient {
 
   private async request<T extends ApiResponse>(
     url: string,
-    options: { method?: string; body?: string } = {}
+    options: { method?: string; body?: string } = {},
+    allowFalseResult = false
   ): Promise<T> {
     // Use globalThis.fetch for testability
     const fetchFn = (globalThis.fetch as unknown as typeof fetch) || fetch;
     const response = await fetchFn(url, { ...options, headers: this.headers });
-    return this.handleResponse<T>(response as Response);
+    return this.handleResponse<T>(response as Response, allowFalseResult);
   }
 
   // Collections API
@@ -782,10 +786,13 @@ class RaindropClient {
   }
 
   async checkUrlExists(urls: string[]): Promise<CheckUrlExistsResponse> {
-    return this.request<CheckUrlExistsResponse>(this.buildUrl("/import/url/exists"), {
-      method: "POST",
-      body: JSON.stringify({ urls })
-    });
+    // This endpoint returns HTTP 200 with `result: false` when none of the URLs
+    // are saved, so `result: false` here means "no duplicates", not an error.
+    return this.request<CheckUrlExistsResponse>(
+      this.buildUrl("/import/url/exists"),
+      { method: "POST", body: JSON.stringify({ urls }) },
+      true
+    );
   }
 }
 
